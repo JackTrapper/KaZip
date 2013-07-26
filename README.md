@@ -54,7 +54,7 @@ FROM THE USE OF COMPONENTS.
 USE THIS COMPONENTS AT YOUR OWN RISK
 
 For contacts:
- my e-mail: kiril@pari.bg, kirila@abv.bg
+ my e-mail: kiril at pari.bg, kirila at abv.bg
  my site  : http://kadao.dir.bg/
 
 Best regards
