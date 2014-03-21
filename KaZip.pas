@@ -123,7 +123,7 @@ type
 	  9 - Enhanced Deflating using Deflate64(tm)
 	 10 - PKWARE Data Compression Library Imploding
 	 11 - Reserved by PKWARE
-			 12 - File is compressed using BZIP2 algorithm
+	 12 - File is compressed using BZIP2 algorithm
 	 }
 
 	{DoChange Events
@@ -496,15 +496,16 @@ uses
 	FileCtrl;
 
 const
-	ZL_DEF_COMPRESSIONMETHOD = $8; { Deflate }
-	ZL_ENCH_COMPRESSIONMETHOD = $9; { Enchanced Deflate }
+	ZL_FASTEST_COMPRESSION = $0;		//0 = The file is stored (no compression)
+	ZL_FAST_COMPRESSION = $1;			//1 = The file is Shrunk
+	ZL_DEFAULT_COMPRESSION = $2;		//2 = The file is Reduced with compression factor 1
+	ZL_MAXIMUM_COMPRESSION = $3;		//3 = The file is Reduced with compression factor 2
+	ZL_DEF_COMPRESSIONMETHOD = $8; 	//8 = The file is Deflated
+	ZL_ENCH_COMPRESSIONMETHOD = $9; 	//9 - Enhanced Deflating using Deflate64(tm)
+
 	ZL_DEF_COMPRESSIONINFO = $7; { 32k window for Deflate }
 	ZL_PRESET_DICT = $20;
 
-	ZL_FASTEST_COMPRESSION = $0;
-	ZL_FAST_COMPRESSION = $1;
-	ZL_DEFAULT_COMPRESSION = $2;
-	ZL_MAXIMUM_COMPRESSION = $3;
 
 	ZL_FCHECK_MASK = $1F;
 	ZL_CINFO_MASK = $F0; { mask out leftmost 4 bits }
@@ -658,16 +659,16 @@ var
 	Compress: Byte;
 begin
 	Result := 0;
-	if (CompressionMethod = 8) then
+	if (CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) then
 	begin
 		FZLHeader.CMF := (ZL_DEF_COMPRESSIONINFO shl 4); { 32k Window size }
 		FZLHeader.CMF := FZLHeader.CMF or ZL_DEF_COMPRESSIONMETHOD; { Deflate }
 		Compress := ZL_DEFAULT_COMPRESSION;
 		case BitFlag and 6 of
-			0: Compress := ZL_DEFAULT_COMPRESSION;
-			2: Compress := ZL_MAXIMUM_COMPRESSION;
-			4: Compress := ZL_FAST_COMPRESSION;
-			6: Compress := ZL_FASTEST_COMPRESSION;
+		0: Compress := ZL_DEFAULT_COMPRESSION;
+		2: Compress := ZL_MAXIMUM_COMPRESSION;
+		4: Compress := ZL_FAST_COMPRESSION;
+		6: Compress := ZL_FASTEST_COMPRESSION;
 		end;
 		FZLHeader.FLG := FZLHeader.FLG or (Compress shl 6);
 		FZLHeader.FLG := FZLHeader.FLG and not ZL_PRESET_DICT; { no preset dictionary}
@@ -694,21 +695,21 @@ var
 	Compress: Byte;
 begin
 	Result := '';
-	if (CompressionMethod = 0) or (CompressionMethod = 8) then
+	if (CompressionMethod = ZL_FASTEST_COMPRESSION) or (CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) then
 	begin
 		BA := FParent.GetLocalEntry(FParent.FParent.FZipStream, LocalOffset, False);
 		if BA.LocalFileHeaderSignature <> $04034B50 then
 			Exit;
-		if (CompressionMethod = 8) then
+		if (CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) then
 		begin
 			FZLHeader.CMF := (ZL_DEF_COMPRESSIONINFO shl 4); { 32k Window size }
 			FZLHeader.CMF := FZLHeader.CMF or ZL_DEF_COMPRESSIONMETHOD; { Deflate }
 			Compress := ZL_DEFAULT_COMPRESSION;
 			case BitFlag and 6 of
-				0: Compress := ZL_DEFAULT_COMPRESSION;
-				2: Compress := ZL_MAXIMUM_COMPRESSION;
-				4: Compress := ZL_FAST_COMPRESSION;
-				6: Compress := ZL_FASTEST_COMPRESSION;
+			0: Compress := ZL_DEFAULT_COMPRESSION;
+			2: Compress := ZL_MAXIMUM_COMPRESSION;
+			4: Compress := ZL_FAST_COMPRESSION;
+			6: Compress := ZL_FASTEST_COMPRESSION;
 			end;
 			FZLHeader.FLG := FZLHeader.FLG or (Compress shl 6);
 			FZLHeader.FLG := FZLHeader.FLG and not ZL_PRESET_DICT; { no preset dictionary}
@@ -734,9 +735,9 @@ end;
 function TKAZipEntriesEntry.GetLocalEntrySize: Cardinal;
 begin
 	Result := SizeOf(TLocalFile) - 3 * SizeOf(string) +
-		FCentralDirectoryFile.CompressedSize +
-		FCentralDirectoryFile.FilenameLength +
-		FCentralDirectoryFile.ExtraFieldLength;
+			FCentralDirectoryFile.CompressedSize +
+			FCentralDirectoryFile.FilenameLength +
+			FCentralDirectoryFile.ExtraFieldLength;
 	if (FCentralDirectoryFile.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
 	begin
 		Result := Result + SizeOf(TDataDescriptor);
@@ -1086,13 +1087,13 @@ begin
 			Entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
 
 			Entry.FCompressionType := ctUnknown;
-			if (CDFile.CompressionMethod = 8) or (CDFile.CompressionMethod = 9) then
+			if (CDFile.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) or (CDFile.CompressionMethod = ZL_ENCH_COMPRESSIONMETHOD) then
 			begin
 				case CDFile.GeneralPurposeBitFlag and 6 of
-					0: Entry.FCompressionType := ctNormal;
-					2: Entry.FCompressionType := ctMaximum;
-					4: Entry.FCompressionType := ctFast;
-					6: Entry.FCompressionType := ctSuperFast
+				0: Entry.FCompressionType := ctNormal;
+				2: Entry.FCompressionType := ctMaximum;
+				4: Entry.FCompressionType := ctFast;
+				6: Entry.FCompressionType := ctSuperFast
 				end;
 			end;
 			Entry.FCentralDirectoryFile := CDFile;
@@ -1277,13 +1278,13 @@ begin
 					Entry.FIsEncrypted := False;
 				Entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
 				Entry.FCompressionType := ctUnknown;
-				if (CDFile.CompressionMethod = 8) or (CDFile.CompressionMethod = 9) then
+				if (CDFile.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) or (CDFile.CompressionMethod = ZL_ENCH_COMPRESSIONMETHOD) then
 				begin
 					case CDFile.GeneralPurposeBitFlag and 6 of
-						0: Entry.FCompressionType := ctNormal;
-						2: Entry.FCompressionType := ctMaximum;
-						4: Entry.FCompressionType := ctFast;
-						6: Entry.FCompressionType := ctSuperFast
+					0: Entry.FCompressionType := ctNormal;
+					2: Entry.FCompressionType := ctMaximum;
+					4: Entry.FCompressionType := ctFast;
+					6: Entry.FCompressionType := ctSuperFast
 					end;
 				end;
 				Entry.FCentralDirectoryFile := CDFile;
@@ -1606,7 +1607,7 @@ begin
 	end;
 
 	CS := TStringStream.Create('');
-	CS.Position := 0;
+	CS.Position := ZL_FASTEST_COMPRESSION;
 	try
 		UL := Stream.Size - Stream.Position;
 		SetLength(S, UL);
@@ -1614,7 +1615,7 @@ begin
 		if UL > 0 then
 		begin
 			Stream.Read(S[1], UL);
-			CM := 8;
+			CM := ZL_DEF_COMPRESSIONMETHOD;
 		end;
 		FCRC32 := CalcCRC32(S);
 		FParent.FCurrentDFS := UL;
@@ -1628,7 +1629,7 @@ begin
 			ctNone: Level := clNone;
 		end;
 
-		if CM = 8 then
+		if CM = ZL_DEF_COMPRESSIONMETHOD then
 		begin
 			Compressor := TCompressionStream.Create(Level, CS);
 			try
@@ -1740,13 +1741,13 @@ begin
 		Result.FIsEncrypted := False;
 	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) > 0;
 	Result.FCompressionType := ctUnknown;
-	if (Result.FCentralDirectoryFile.CompressionMethod = 8) or (Result.FCentralDirectoryFile.CompressionMethod = 9) then
+	if (Result.FCentralDirectoryFile.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) or (Result.FCentralDirectoryFile.CompressionMethod = ZL_ENCH_COMPRESSIONMETHOD) then
 	begin
 		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 6 of
-			0: Result.FCompressionType := ctNormal;
-			2: Result.FCompressionType := ctMaximum;
-			4: Result.FCompressionType := ctFast;
-			6: Result.FCompressionType := ctSuperFast
+		0: Result.FCompressionType := ctNormal;
+		2: Result.FCompressionType := ctMaximum;
+		4: Result.FCompressionType := ctFast;
+		6: Result.FCompressionType := ctSuperFast
 		end;
 	end;
 	FParent.FIsDirty := True;
@@ -1763,7 +1764,7 @@ function TKAZipEntries.AddStreamRebuild(ItemName: string;
 var
 	Compressor: TCompressionStream;
 	CS: TStringStream;
-	CM: Word;
+	cm: Word; //CompressionMethod to use
 	S: string;
 	UL: Integer;
 	CL: Integer;
@@ -1804,7 +1805,7 @@ begin
 				end;
 			end;
 
-			CM := 0;
+			cm := 0;
 			CS := TStringStream.Create('');
 			CS.Position := 0;
 			try
@@ -1813,7 +1814,7 @@ begin
 				if UL > 0 then
 				begin
 					Stream.Read(S[1], UL);
-					CM := 8;
+					cm := ZL_DEF_COMPRESSIONMETHOD;
 				end;
 				FCRC32 := CalcCRC32(S);
 				FParent.FCurrentDFS := UL;
@@ -1827,7 +1828,7 @@ begin
 					ctNone: Level := clNone;
 				end;
 
-				if CM = 8 then
+				if cm = ZL_DEF_COMPRESSIONMETHOD then
 				begin
 					Compressor := TCompressionStream.Create(Level, CS);
 					try
@@ -1850,7 +1851,7 @@ begin
 				LocalFileHeaderSignature := $04034B50;
 				VersionNeededToExtract := 20;
 				GeneralPurposeBitFlag := 0;
-				CompressionMethod := CM;
+				CompressionMethod := cm;
 				LastModFileTimeDate := DateTimeToFileDate(FileDate);
 				Crc32 := FCRC32;
 				CompressedSize := CL;
@@ -1954,7 +1955,7 @@ begin
 				if UL > 0 then
 				begin
 					Stream.Read(S[1], UL);
-					CM := 8;
+					CM := ZL_DEF_COMPRESSIONMETHOD;
 				end;
 				FCRC32 := CalcCRC32(S);
 				FParent.FCurrentDFS := UL;
@@ -1968,7 +1969,7 @@ begin
 					ctNone: Level := clNone;
 				end;
 
-				if CM = 8 then
+				if CM = ZL_DEF_COMPRESSIONMETHOD then
 				begin
 					Compressor := TCompressionStream.Create(Level, CS);
 					try
@@ -2059,13 +2060,13 @@ begin
 		Result.FIsEncrypted := False;
 	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) > 0;
 	Result.FCompressionType := ctUnknown;
-	if (Result.FCentralDirectoryFile.CompressionMethod = 8) or (Result.FCentralDirectoryFile.CompressionMethod = 9) then
+	if (Result.FCentralDirectoryFile.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) or (Result.FCentralDirectoryFile.CompressionMethod = ZL_ENCH_COMPRESSIONMETHOD) then
 	begin
 		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 6 of
-			0: Result.FCompressionType := ctNormal;
-			2: Result.FCompressionType := ctMaximum;
-			4: Result.FCompressionType := ctFast;
-			6: Result.FCompressionType := ctSuperFast
+		0: Result.FCompressionType := ctNormal;
+		2: Result.FCompressionType := ctMaximum;
+		4: Result.FCompressionType := ctFast;
+		6: Result.FCompressionType := ctSuperFast
 		end;
 	end;
 	FParent.FIsDirty := True;
@@ -2126,10 +2127,12 @@ begin
 	Result := nil;
 	if (FParent.FStoreFolders) and (FParent.FStoreRelativePath) then
 		AddFolderChain(FileName);
+
 	if FParent.FZipSaveMethod = FastSave then
 		Result := AddStreamFast(FileName, FileAttr, FileDate, Stream)
 	else if FParent.FZipSaveMethod = RebuildAll then
 		Result := AddStreamRebuild(FileName, FileAttr, FileDate, Stream);
+
 	if Assigned(FParent.FOnAddItem) then
 		FParent.FOnAddItem(FParent, FileName);
 end;
@@ -2322,7 +2325,7 @@ var
 {$ENDIF}
 begin
 	if (
-		(Item.CompressionMethod = 8) or
+		(Item.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) or
 {$IFDEF USE_BZIP2}
 		(Item.CompressionMethod = 12) or
 {$ENDIF}
@@ -2338,7 +2341,7 @@ begin
 				SFS.Position := 0;
 				FParent.FCurrentDFS := Item.SizeUncompressed;
 				//****************************************************** DEFLATE
-				if (Item.CompressionMethod = 8) then
+				if (Item.CompressionMethod = ZL_DEF_COMPRESSIONMETHOD) then
 				begin
 					Decompressor := TDecompressionStream.Create(SFS);
 					Decompressor.OnProgress := FParent.OnDecompress;
