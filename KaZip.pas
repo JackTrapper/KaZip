@@ -1,6 +1,89 @@
 unit KAZip;
+
+{
+	How to create a zip file:
+
+		var
+			zip: TKaZip;
+			zipFile: string;
+		begin
+			zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+			zip := TKaZip.Create(nil);
+			zip.CreateZip(zipFile);
+			zip.Open(zipFile);
+			zip.AddFile('C:\DelphiComponents\KaZip\Component\KAZip.pas', 'kazip.pas');
+			zip.Close;
+			zip.Free;
+
+	How to add a stream to a zip file:
+		var
+			zip: TKaZip;
+			zipFile: string;
+		begin
+			zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+			zip := TKaZip.Create(nil);
+			zip.CreateZip(zipFile);
+			zip.Open(zipFile);
+			zip.AddStream('Attachment1.jpg', stream);
+			zip.Close;
+			zip.Free;
+
+	How to add a string to a zip file:
+		var
+			zip: TKaZip;
+			zipFile: string;
+			data: string;
+			ms: TStringStream;
+		begin
+			zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+			zip := TKaZip.Create(nil);
+			zip.CreateZip(zipFile);
+			zip.Open(zipFile);
+
+			ms := TStringStream.Create('The quick brown fox jumped over the lazy dog then sat on a log');
+			try
+				zip.AddStream('New Document.txt', stream);
+			finally
+				ms.Free;
+			end;
+			zip.Close;
+			zip.Free;
+
+	How to add a WideString to a zip file (Remember, a widestring is UTF-16 encoded)
+
+		var
+			zip: TKaZip;
+			zipFile: string;
+			ms: TStringStream;
+			docxml: WideString;
+		const
+			UTF16BOM = #$FF#$FE; //little-endian (i.e. Intel) order
+		begin
+			zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+			zip := TKaZip.Create(nil);
+			zip.CreateZip(zipFile);
+			zip.Open(zipFile);
+
+			docxml := '<Sample>The quick brown fox jumped over the lazy dog then sat on a log</Sample>';
+			ms := TMemoryStream.Create
+			try
+				ms.Write(UTF16BOM[1], 2); //Write the UTF-16 Byte Order Mark (optional)
+				ms.Write(docxml[1], Length(docxml)*2);
+				zip.AddStream('Mouse.xml', stream);
+			finally
+				ms.Free;
+			end;
+			zip.Close;
+			zip.Free;
+
+}
+
 interface
-{$DEFINE USE_BZIP2}
+{DEFINE USE_BZIP2}
 uses
   Windows,
   SysUtils,
@@ -31,18 +114,18 @@ type
   TOnOverwriteFile=Procedure(Sender:TObject; Var FileName : String; Var Action : TOverwriteAction) of Object;
 
   {
-          0 - The file is stored (no compression)
-          1 - The file is Shrunk
-          2 - The file is Reduced with compression factor 1
-          3 - The file is Reduced with compression factor 2
-          4 - The file is Reduced with compression factor 3
-          5 - The file is Reduced with compression factor 4
-          6 - The file is Imploded
-          7 - Reserved for Tokenizing compression algorithm
-          8 - The file is Deflated
-          9 - Enhanced Deflating using Deflate64(tm)
-         10 - PKWARE Data Compression Library Imploding
-         11 - Reserved by PKWARE
+			 0 - The file is stored (no compression)
+			 1 - The file is Shrunk
+			 2 - The file is Reduced with compression factor 1
+			 3 - The file is Reduced with compression factor 2
+			 4 - The file is Reduced with compression factor 3
+			 5 - The file is Reduced with compression factor 4
+			 6 - The file is Imploded
+			 7 - Reserved for Tokenizing compression algorithm
+			 8 - The file is Deflated
+			 9 - Enhanced Deflating using Deflate64(tm)
+			10 - PKWARE Data Compression Library Imploding
+			11 - Reserved by PKWARE
          12 - File is compressed using BZIP2 algorithm
    }
 
@@ -79,7 +162,7 @@ type
 
   TDataDescriptor = packed record
     DescriptorSignature            : Cardinal;   //    4 bytes UNDOCUMENTED
-    Crc32                          : Cardinal;   //    4 bytes
+	 Crc32                          : Cardinal;   //    4 bytes
     CompressedSize                 : Cardinal;   //    4 bytes
     UncompressedSize               : Cardinal;   //    4 bytes
   End;
@@ -112,7 +195,7 @@ type
     NumberOfTheDiskWithTheStart     : WORD;      //    2 bytes
     TotalNumberOfEntriesOnThisDisk  : WORD;      //    2 bytes
     TotalNumberOfEntries            : WORD;      //    2 bytes
-    SizeOfTheCentralDirectory       : Cardinal;  //    4 bytes
+	 SizeOfTheCentralDirectory       : Cardinal;  //    4 bytes
     OffsetOfStartOfCentralDirectory : Cardinal;  //    4 bytes
     ZipfileCommentLength            : WORD;      //    2 bytes
   end;
@@ -153,7 +236,7 @@ type
     Property    FileName          : String               Read FCentralDirectoryFile.FileName                     Write SetFileName;
     Property    Comment           : String               Read FCentralDirectoryFile.FileComment                  Write SetComment;
     Property    SizeUncompressed  : Cardinal             Read FCentralDirectoryFile.UncompressedSize;
-    Property    SizeCompressed    : Cardinal             Read FCentralDirectoryFile.CompressedSize;
+	 Property    SizeCompressed    : Cardinal             Read FCentralDirectoryFile.CompressedSize;
     Property    Date              : TDateTime            Read FDate;
     Property    CRC32             : Cardinal             Read FCentralDirectoryFile.CRC32;
     Property    Attributes        : Cardinal             Read FCentralDirectoryFile.ExternalFileAttributes;
@@ -190,7 +273,7 @@ type
     Function    FindCentralDirectory(MS:TStream):Boolean;
     function    ParseCentralHeaders(MS: TStream): Boolean;
     function    GetLocalEntry(MS: TStream; Offset : Integer; HeaderOnly : Boolean): TLocalFile;
-    Procedure   LoadLocalHeaders(MS: TStream);
+	 Procedure   LoadLocalHeaders(MS: TStream);
     Function    ParseLocalHeaders(MS:TStream):Boolean;
 
     //**************************************************************************
@@ -227,7 +310,7 @@ type
     Procedure   RemoveFiles(List : TList);
     Procedure   RemoveSelected;
     Procedure   Rebuild;
-   //**************************************************************************
+	//**************************************************************************
     Procedure   Select(WildCard : String);
     Procedure   SelectAll;
     Procedure   DeSelectAll;
@@ -301,7 +384,7 @@ type
     procedure   SetComment(const Value: TStrings);
     procedure   SetZipSaveMethod(const Value: TZipSaveMethod);
     procedure   SetActive(const Value: Boolean);
-    procedure   SetZipCompressionType(const Value: TZipCompressionType);
+	 procedure   SetZipCompressionType(const Value: TZipCompressionType);
     function    GetFileNames: TStrings;
     procedure   SetFileNames(const Value: TStrings);
     procedure   SetUseTempFiles(const Value: Boolean);
@@ -337,75 +420,75 @@ type
     function    GetDelphiTempFileName: String;
     function    GetFileName(S: String): String;
     function    GetFilePath(S: String): String;
-    //**************************************************************************
-    Procedure   CreateZip(Stream:TStream);Overload;
-    Procedure   CreateZip(FileName:String);Overload;
-    Procedure   Open(FileName:String);Overload;
-    Procedure   Open(MS : TStream);Overload;
-    Procedure   SaveToStream(Stream:TStream);
-    Procedure   Rebuild;
-    Procedure   FixZip(MS : TStream);
-    Procedure   Close;
-    //**************************************************************************
-    Function    AddFile(FileName, NewFileName: String):TKAZipEntriesEntry;Overload;
-    Function    AddFile(FileName:String):TKAZipEntriesEntry;Overload;
-    Function    AddFiles(FileNames:TStrings):Boolean;
-    Function    AddFolder(FolderName:String; RootFolder:String; WildCard:String; WithSubFolders : Boolean):Boolean;
-    Function    AddFilesAndFolders(FileNames:TStrings; RootFolder:String; WithSubFolders : Boolean):Boolean;
-    Function    AddStream(FileName:String; FileAttr : Word; FileDate : TDateTime; Stream:TStream):TKAZipEntriesEntry;Overload;
-    Function    AddStream(FileName: String; Stream : TStream):TKAZipEntriesEntry;Overload;
-    //**************************************************************************
-    Procedure   Remove(ItemIndex:Integer);Overload;
-    Procedure   Remove(Item:TKAZipEntriesEntry);Overload;
-    Procedure   Remove(FileName:String);Overload;
-    Procedure   RemoveFiles(List : TList);
-    Procedure   RemoveSelected;
-    //**************************************************************************
-    Procedure   Select(WildCard : String);
-    Procedure   SelectAll;
-    Procedure   DeSelectAll;
-    Procedure   InvertSelection;
-    //**************************************************************************
-    Procedure   Rename(Item : TKAZipEntriesEntry; NewFileName: String);Overload;
-    Procedure   Rename(ItemIndex : Integer; NewFileName: String);Overload;
-    Procedure   Rename(FileName : String; NewFileName: String);Overload;
-    Procedure   CreateFolder(FolderName : String; FolderDate : TDateTime);
-    Procedure   RenameFolder(FolderName : String; NewFolderName : String);
-    procedure   RenameMultiple(Names : TStringList; NewNames : TStringList);
-    //**************************************************************************
-    procedure   ExtractToFile  (Item      : TKAZipEntriesEntry; FileName: String);Overload;
-    procedure   ExtractToFile  (ItemIndex : Integer; FileName: String);Overload;
-    procedure   ExtractToFile  (FileName, DestinationFileName:String);Overload;
-    procedure   ExtractToStream(Item      : TKAZipEntriesEntry; Stream: TStream);
-    procedure   ExtractAll(TargetDirectory: String);
-    procedure   ExtractSelected(TargetDirectory: String);
-    //**************************************************************************
-    Property    Entries         : TKAZipEntries Read FZipHeader;
-    Property    HasBadEntries   : Boolean       Read FHasBadEntries;
+	 //**************************************************************************
+	 Procedure   CreateZip(Stream:TStream);Overload;
+	 Procedure   CreateZip(FileName:String);Overload;
+	 Procedure   Open(FileName:String);Overload;
+	 Procedure   Open(MS : TStream);Overload;
+	 Procedure   SaveToStream(Stream:TStream);
+	 Procedure   Rebuild;
+	 Procedure   FixZip(MS : TStream);
+	 Procedure   Close;
+	 //**************************************************************************
+	 Function    AddFile(FileName, NewFileName: String):TKAZipEntriesEntry;Overload;
+	 Function    AddFile(FileName:String):TKAZipEntriesEntry;Overload;
+	 Function    AddFiles(FileNames:TStrings):Boolean;
+	 Function    AddFolder(FolderName:String; RootFolder:String; WildCard:String; WithSubFolders : Boolean):Boolean;
+	 Function    AddFilesAndFolders(FileNames:TStrings; RootFolder:String; WithSubFolders : Boolean):Boolean;
+	 Function    AddStream(FileName:String; FileAttr : Word; FileDate : TDateTime; Stream:TStream):TKAZipEntriesEntry;Overload;
+	 Function    AddStream(FileName: String; Stream : TStream):TKAZipEntriesEntry;Overload;
+	 //**************************************************************************
+	 Procedure   Remove(ItemIndex:Integer);Overload;
+	 Procedure   Remove(Item:TKAZipEntriesEntry);Overload;
+	 Procedure   Remove(FileName:String);Overload;
+	 Procedure   RemoveFiles(List : TList);
+	 Procedure   RemoveSelected;
+	 //**************************************************************************
+	 Procedure   Select(WildCard : String);
+	 Procedure   SelectAll;
+	 Procedure   DeSelectAll;
+	 Procedure   InvertSelection;
+	 //**************************************************************************
+	 Procedure   Rename(Item : TKAZipEntriesEntry; NewFileName: String);Overload;
+	 Procedure   Rename(ItemIndex : Integer; NewFileName: String);Overload;
+	 Procedure   Rename(FileName : String; NewFileName: String);Overload;
+	 Procedure   CreateFolder(FolderName : String; FolderDate : TDateTime);
+	 Procedure   RenameFolder(FolderName : String; NewFolderName : String);
+	 procedure   RenameMultiple(Names : TStringList; NewNames : TStringList);
+	 //**************************************************************************
+	 procedure   ExtractToFile  (Item      : TKAZipEntriesEntry; FileName: String);Overload;
+	 procedure   ExtractToFile  (ItemIndex : Integer; FileName: String);Overload;
+	 procedure   ExtractToFile  (FileName, DestinationFileName:String);Overload;
+	 procedure   ExtractToStream(Item      : TKAZipEntriesEntry; Stream: TStream);
+	 procedure   ExtractAll(TargetDirectory: String);
+	 procedure   ExtractSelected(TargetDirectory: String);
+	 //**************************************************************************
+	 Property    Entries         : TKAZipEntries Read FZipHeader;
+	 Property    HasBadEntries   : Boolean       Read FHasBadEntries;
   published
-    { Published declarations }
-    Property    FileName          : String              Read FFileName           Write SetFileName;
-    Property    IsZipFile         : Boolean             Read FIsZipFile          Write SetIsZipFile;
-    Property    SaveMethod        : TZipSaveMethod      Read FZipSaveMethod      Write SetZipSaveMethod;
-    Property    StoreRelativePath : Boolean             Read FStoreRelativePath  Write FStoreRelativePath;
-    Property    StoreFolders      : Boolean             read FStoreFolders       write SetStoreFolders;
-    Property    CompressionType   : TZipCompressionType Read FZipCompressionType Write SetZipCompressionType;
-    Property    Comment           : TStrings            Read GetComment          Write SetComment;
-    Property    FileNames         : TStrings            Read GetFileNames        Write SetFileNames;
-    Property    UseTempFiles      : Boolean             read FUseTempFiles       write SetUseTempFiles;
-    Property    OverwriteAction   : TOverwriteAction    read FOverwriteAction    write SetOverwriteAction;
-    Property    ComponentVersion  : String              read FComponentVersion   write SetComponentVersion;
-    Property    ReadOnly          : Boolean             read FReadOnly           write SetReadOnly;
-    Property    ApplyAtributes    : Boolean             read FApplyAttributes    write SetApplyAtributes;
-    Property    OnDecompressFile  : TOnDecompressFile   Read FOnDecompressFile   Write FOnDecompressFile;
-    Property    OnCompressFile    : TOnCompressFile     Read FOnCompressFile     Write FOnCompressFile;
-    Property    OnZipChange       : TOnZipChange        Read FOnZipChange        Write FOnZipChange;
-    Property    OnZipOpen         : TOnZipOpen          Read FOnZipOpen          Write FOnZipOpen;
-    Property    OnAddItem         : TOnAddItem          read FOnAddItem          write SetOnAddItem;
-    Property    OnRebuildZip      : TOnRebuildZip       read FOnRebuildZip       write SetOnRebuildZip;
-    Property    OnRemoveItems     : TOnRemoveItems      read FOnRemoveItems      write SetOnRemoveItems;
-    Property    OnOverwriteFile   : TOnOverwriteFile    read FOnOverwriteFile    write SetOnOverwriteFile;
-    Property    Active            : Boolean             Read FIsZipFile          Write SetActive;
+	 { Published declarations }
+	 Property    FileName          : String              Read FFileName           Write SetFileName;
+	 Property    IsZipFile         : Boolean             Read FIsZipFile          Write SetIsZipFile;
+	 Property    SaveMethod        : TZipSaveMethod      Read FZipSaveMethod      Write SetZipSaveMethod;
+	 Property    StoreRelativePath : Boolean             Read FStoreRelativePath  Write FStoreRelativePath;
+	 Property    StoreFolders      : Boolean             read FStoreFolders       write SetStoreFolders;
+	 Property    CompressionType   : TZipCompressionType Read FZipCompressionType Write SetZipCompressionType;
+	 Property    Comment           : TStrings            Read GetComment          Write SetComment;
+	 Property    FileNames         : TStrings            Read GetFileNames        Write SetFileNames;
+	 Property    UseTempFiles      : Boolean             read FUseTempFiles       write SetUseTempFiles;
+	 Property    OverwriteAction   : TOverwriteAction    read FOverwriteAction    write SetOverwriteAction;
+	 Property    ComponentVersion  : String              read FComponentVersion   write SetComponentVersion;
+	 Property    ReadOnly          : Boolean             read FReadOnly           write SetReadOnly;
+	 Property    ApplyAtributes    : Boolean             read FApplyAttributes    write SetApplyAtributes;
+	 Property    OnDecompressFile  : TOnDecompressFile   Read FOnDecompressFile   Write FOnDecompressFile;
+	 Property    OnCompressFile    : TOnCompressFile     Read FOnCompressFile     Write FOnCompressFile;
+	 Property    OnZipChange       : TOnZipChange        Read FOnZipChange        Write FOnZipChange;
+	 Property    OnZipOpen         : TOnZipOpen          Read FOnZipOpen          Write FOnZipOpen;
+	 Property    OnAddItem         : TOnAddItem          read FOnAddItem          write SetOnAddItem;
+	 Property    OnRebuildZip      : TOnRebuildZip       read FOnRebuildZip       write SetOnRebuildZip;
+	 Property    OnRemoveItems     : TOnRemoveItems      read FOnRemoveItems      write SetOnRemoveItems;
+	 Property    OnOverwriteFile   : TOnOverwriteFile    read FOnOverwriteFile    write SetOnOverwriteFile;
+	 Property    Active            : Boolean             Read FIsZipFile          Write SetActive;
   end;
 
 procedure Register;
@@ -413,6 +496,9 @@ Function ToZipName(FileName:String):String;
 Function ToDosName(FileName:String):String;
 
 implementation
+
+uses
+	FileCtrl;
 
 Const
   ZL_DEF_COMPRESSIONMETHOD  = $8;  { Deflate }
@@ -1154,7 +1240,7 @@ begin
                    LocalFile.CompressedSize   := DataDescriptor.CompressedSize;
                    LocalFile.UncompressedSize := DataDescriptor.UncompressedSize;
                  End;
-              MS.Position := MS.Position+LocalFile.CompressedSize;
+				  MS.Position := MS.Position+LongInt(LocalFile.CompressedSize);
 
               FillChar(CDFile,SizeOf(TCentralDirectoryFile),0);
               CDFile.CentralFileHeaderSignature     := $02014B50;
@@ -1231,8 +1317,8 @@ Var
   TargetPos           : Cardinal;
   Border              : Cardinal;
 
-  NR                  : Integer;
-  NW                  : Integer;
+//  NR                  : Integer;
+//  NW                  : Integer;
   BufStart            : Integer;
   BufLen              : Integer;
   ShiftSize           : Cardinal;
@@ -1250,10 +1336,10 @@ begin
 
        SetLength(BUF,BufLen);
        FParent.FZipStream.Position := BufStart;
-       NR := FParent.FZipStream.Read(BUF[1],BufLen);
+//       NR := FParent.FZipStream.Read(BUF[1],BufLen);
 
        FParent.FZipStream.Position := TargetPos;
-       NW := FParent.FZipStream.Write(BUF[1],BufLen);
+//       NW := FParent.FZipStream.Write(BUF[1],BufLen);
        SetLength(BUF,0);
 
        For X := 0 to Count-1 do
@@ -1984,7 +2070,7 @@ Var
  MS     : TMemoryStream;
  NoMore : Boolean;
 Begin
-  Result := False;
+//  Result := False;
   FN     := ExtractFilePath(ToDosName(ToZipName(ItemName)));
   TN     := FN;
   INCN   := '';
@@ -2288,8 +2374,8 @@ Var
   Attr          : Integer;
 begin
   if Item.IsFolder Then
-     Begin
-       ForceDirectories(FileName);
+	  Begin
+		 ForceDirectories(FileName);
      End
   Else
      Begin
@@ -2576,21 +2662,23 @@ Var
   BR   : Integer;
   L    : Integer;
 Begin
-  If Names.Count <> NewNames.Count Then
-     Begin
-       Raise Exception.Create('Names and NewNames must have equal count');
-     End
-  Else
-     Begin
-       FParent.FBatchMode := True;
-       Try
-         For X := 0 To Names.Count-1 do
-             Begin
-               L := Length(Names.Strings[X]);
-               if (L>0) And ((Names.Strings[X][L]='\') or (Names.Strings[X][L]='/')) Then
-                  Begin
-                    RenameFolder(Names.Strings[X],NewNames.Strings[X]);
-                    Inc(BR);
+	BR := 0;
+
+	If Names.Count <> NewNames.Count Then
+	Begin
+		Raise Exception.Create('Names and NewNames must have equal count');
+	End
+	Else
+	Begin
+		FParent.FBatchMode := True;
+		Try
+			For X := 0 To Names.Count-1 do
+			Begin
+				L := Length(Names.Strings[X]);
+				if (L>0) And ((Names.Strings[X][L]='\') or (Names.Strings[X][L]='/')) Then
+				Begin
+					RenameFolder(Names.Strings[X],NewNames.Strings[X]);
+					Inc(BR);
                   End
                Else
                   Begin
@@ -2601,7 +2689,7 @@ Begin
        Finally
          FParent.FBatchMode := False;
        End;
-       If BR > 0 Then
+		 If BR > 0 Then
           Begin
             Rebuild;
             FParent.DoChange(FParent,6);
@@ -2989,7 +3077,7 @@ begin
            MS.Write(CDF.FileComment[1],CDF.FileCommentLength);
         if Assigned(FOnRebuildZip) Then FOnRebuildZip(Self,X,Entries.Count-1);
       End;
-  NewEndOfCentralDir.SizeOfTheCentralDirectory := MS.Position-NewEndOfCentralDir.OffsetOfStartOfCentralDirectory;
+  NewEndOfCentralDir.SizeOfTheCentralDirectory := Cardinal(MS.Position)-NewEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 end;
 
 procedure TKAZip.RebuildEndOfCentralDirectory(MS: TStream);
@@ -3062,7 +3150,7 @@ Begin
              Inc(Y);
            End;
       End;
-  NewEndOfCentralDir.SizeOfTheCentralDirectory := MS.Position-NewEndOfCentralDir.OffsetOfStartOfCentralDirectory;
+  NewEndOfCentralDir.SizeOfTheCentralDirectory := Cardinal(MS.Position)-NewEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 
   FRebuildECDP := MS.Position;
   MS.Write(NewEndOfCentralDir,SizeOf(NewEndOfCentralDir));
