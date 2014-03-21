@@ -225,7 +225,7 @@ type
 	public
 		constructor Create(Collection: TCollection); override;
 		destructor Destroy; override;
-		function GetCompressedData: string; overload;
+		function GetCompressedData: AnsiString; overload;
 		function GetCompressedData(Stream: TStream): Integer; overload;
 		procedure ExtractToFile(FileName: string);
 		procedure ExtractToStream(Stream: TStream);
@@ -329,7 +329,7 @@ type
 		procedure ExtractToFile(Item: TKAZipEntriesEntry; FileName: string); overload;
 		procedure ExtractToFile(ItemIndex: Integer; FileName: string); overload;
 		procedure ExtractToFile(FileName, DestinationFileName: string); overload;
-		procedure ExtractToStream(Item: TKAZipEntriesEntry; Stream: TStream);
+		procedure ExtractToStream(Item: TKAZipEntriesEntry; TargetStream: TStream);
 		procedure ExtractAll(TargetDirectory: string);
 		procedure ExtractSelected(TargetDirectory: string);
 		//**************************************************************************
@@ -646,6 +646,10 @@ const
 		$CDD70693, $54DE5729, $23D967BF, $B3667A2E, $C4614AB8, $5D681B02, $2A6F2B94,
 		$B40BBE37, $C30C8EA1, $5A05DF1B, $2D02EF8D);
 
+const
+	Default_TCentralDirectoryFile: TCentralDirectoryFile = ();
+	Default_TLocalFile: TLocalFile=();
+
 
 procedure Register;
 begin
@@ -784,7 +788,7 @@ begin
 		Result := Result + Stream.Write(BA.CompressedData[1], SizeCompressed);
 end;
 
-function TKAZipEntriesEntry.GetCompressedData: string;
+function TKAZipEntriesEntry.GetCompressedData: AnsiString;
 var
 	BA: TLocalFile;
 	ZLHeader: TZLibStreamHeader;
@@ -1156,7 +1160,8 @@ begin
 		MS.Position := FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 		for X := 0 to FParent.FEndOfCentralDir.TotalNumberOfEntriesOnThisDisk - 1 do
 		begin
-			FillChar(CDFile, SizeOf(TCentralDirectoryFile), 0);
+			//FillCh ar(CDFile, SizeOf(TCentralDirectoryFile), 0);  20140320: Filling a record containing managed types will cause a leak
+			cdFile := Default_TCentralDirectoryFile;
 			MS.Read(CDFile, SizeOf(TCentralDirectoryFile) - 3 * SizeOf(string));
 			Entry := TKAZipEntriesEntry.Create(Self);
 			Entry.FDate := FileDateToDateTime(CDFile.LastModFileTimeDate);
@@ -1229,44 +1234,47 @@ var
 	Byte_: array[0..4] of Byte;
 	DataDescriptor: TDataDescriptor;
 begin
-	FillChar(Result, SizeOf(Result), 0);
+	//20140320 -- You cannot ZeroMe mory/FillCh ar a structure containing strings.
+	//It destroys some internal housekeeping and causes a leak.
+//	FillCh ar(Result, SizeOf(Result), 0);
+	Result := Default_TLocalFile;
+
+
 	MS.Position := Offset;
 	MS.Read(Byte_, 4);
-	if (Byte_[0] = $50)
-		and (Byte_[1] = $4B)
-		and (Byte_[2] = $03)
-		and (Byte_[3] = $04) then
+	if not (
+			(Byte_[0] = $50)
+			and (Byte_[1] = $4B)
+			and (Byte_[2] = $03)
+			and (Byte_[3] = $04)) then
+		Exit;
+
+	MS.Position := Offset;
+	MS.Read(Result, SizeOf(Result) - 3 * SizeOf(AnsiString));
+	if Result.FilenameLength > 0 then
 	begin
-		MS.Position := Offset;
-		MS.Read(Result, SizeOf(Result) - 3 * SizeOf(AnsiString));
-		if Result.FilenameLength > 0 then
-		begin
-			SetLength(Result.FileName, Result.FilenameLength);
-			MS.Read(Result.FileName[1], Result.FilenameLength);
-		end;
-		if Result.ExtraFieldLength > 0 then
-		begin
-			SetLength(Result.ExtraField, Result.ExtraFieldLength);
-			MS.Read(Result.ExtraField[1], Result.ExtraFieldLength);
-		end;
-		if (Result.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
-		begin
-			MS.Read(DataDescriptor, SizeOf(TDataDescriptor));
-			Result.Crc32 := DataDescriptor.Crc32;
-			Result.CompressedSize := DataDescriptor.CompressedSize;
-			Result.UnCompressedSize := DataDescriptor.UnCompressedSize;
-		end;
-		if not HeaderOnly then
-		begin
-			if Result.CompressedSize > 0 then
-			begin
-				SetLength(Result.CompressedData, Result.CompressedSize);
-				MS.Read(Result.CompressedData[1], Result.CompressedSize);
-			end;
-		end;
-	end
-	else
+		SetLength(Result.FileName, Result.FilenameLength);
+		MS.Read(Result.FileName[1], Result.FilenameLength);
+	end;
+	if Result.ExtraFieldLength > 0 then
 	begin
+		SetLength(Result.ExtraField, Result.ExtraFieldLength);
+		MS.Read(Result.ExtraField[1], Result.ExtraFieldLength);
+	end;
+	if (Result.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
+	begin
+		MS.Read(DataDescriptor, SizeOf(TDataDescriptor));
+		Result.Crc32 := DataDescriptor.Crc32;
+		Result.CompressedSize := DataDescriptor.CompressedSize;
+		Result.UnCompressedSize := DataDescriptor.UnCompressedSize;
+	end;
+	if not HeaderOnly then
+	begin
+		if Result.CompressedSize > 0 then
+		begin
+			SetLength(Result.CompressedData, Result.CompressedSize);
+			MS.Read(Result.CompressedData[1], Result.CompressedSize);
+		end;
 	end;
 end;
 
@@ -1338,7 +1346,8 @@ begin
 				end;
 				MS.Position := MS.Position + LongInt(LocalFile.CompressedSize);
 
-				FillChar(CDFile, SizeOf(TCentralDirectoryFile), 0);
+				//FillCha r(CDFile, SizeOf(TCentralDirectoryFile), 0);  20140320 Cannot do FillCh ar on a structure containing managed types
+				CDFile := Default_TCentralDirectoryFile;
 				CDFile.CentralFileHeaderSignature := SIG_CentralFile;
 				CDFile.VersionMadeBy := 20;
 				CDFile.VersionNeededToExtract := LocalFile.VersionNeededToExtract;
@@ -1769,7 +1778,7 @@ begin
 				and final four bytes
 						ADLER32 (Adler-32 checksum)
 		}
-		OutputDebugString('SAMPLING ON');
+//		OutputDebugString('SAMPLING ON');
 		compressor := TZCompressionStream.Create(FParent.FZipStream, compressionLevel,
 					-15, //windowBits - The default value is 15 if deflateInit is used instead.
 					8, //memLevel - The default value is 8
@@ -1788,7 +1797,7 @@ begin
 		finally
 			compressor.Free;
 		end;
-		OutputDebugString('SAMPLING OFF');
+//		OutputDebugString('SAMPLING OFF');
 	end;
 
 	//The central directory will start here; just after the file we just wrote
@@ -2440,81 +2449,76 @@ begin
 	end;
 end;
 
-procedure TKAZipEntries.ExtractToStream(Item: TKAZipEntriesEntry; Stream: TStream);
+procedure TKAZipEntries.ExtractToStream(Item: TKAZipEntriesEntry; TargetStream: TStream);
 var
-	SFS: TMemoryStream;
-	TFS: TStream;
-	BUF: string;
+	sourceStream: TMemoryStream;
+	buf: AnsiString;
 	NR: Cardinal;
-	Decompressor: TZDecompressionStream;
+	decompressor: TZDecompressionStream;
 {$IFDEF USE_BZIP2}
 	DecompressorBZ2: TBZDecompressionStream;
 {$ENDIF}
 begin
-	if (
-		(Item.CompressionMethod = ZipCompressionMethod_Deflate) or
+	if (Item.FIsEncrypted) then
+		raise Exception.Create('Cannot process file "' + Item.FileName + '": File is encrypted');
+
+	if (Item.CompressionMethod <> ZipCompressionMethod_Deflate)
 {$IFDEF USE_BZIP2}
-		(Item.CompressionMethod = ZipCompressionMethod_bzip2) or
+		and (Item.CompressionMethod <> ZipCompressionMethod_bzip2)
 {$ENDIF}
-		(Item.CompressionMethod = ZipCompressionMethod_Store)
-		)
-		and (not Item.FIsEncrypted) then
+		and (Item.CompressionMethod <> ZipCompressionMethod_Store) then
 	begin
-		SFS := TMemoryStream.Create;
-		TFS := Stream;
-		try
-			if Item.GetCompressedData(SFS) > 0 then
+		raise Exception.Create('Cannot process file "' + Item.FileName + '": Unknown compression method '+IntToStr(Item.CompressionMethod));
+	end;
+
+	sourceStream := TMemoryStream.Create;
+	try
+		if Item.GetCompressedData(sourceStream) <= 0 then
+			Exit;
+
+		sourceStream.Position := 0;
+		FParent.FCurrentDFS := Item.SizeUncompressed;
+
+		case Item.CompressionMethod of
+		ZipCompressionMethod_Deflate:
 			begin
-				SFS.Position := 0;
-				FParent.FCurrentDFS := Item.SizeUncompressed;
-				//****************************************************** DEFLATE
-				if (Item.CompressionMethod = ZipCompressionMethod_Deflate) then
-				begin
-					Decompressor := TZDecompressionStream.Create(SFS);
-					Decompressor.OnProgress := FParent.OnDecompress;
-					SetLength(BUF, FParent.FCurrentDFS);
-					try
-						NR := Decompressor.Read(BUF[1], FParent.FCurrentDFS);
-						if NR = FParent.FCurrentDFS then
-							TFS.Write(BUF[1], FParent.FCurrentDFS);
-					finally
-						Decompressor.Free;
-					end;
-				end
-					//******************************************************* BZIP2
-{$IFDEF USE_BZIP2}
-				else if Item.CompressionMethod = ZipCompressionMethod_bzip2 then
-				begin
-					DecompressorBZ2 := TBZDecompressionStream.Create(SFS);
-					DecompressorBZ2.OnProgress := FParent.OnDecompress;
-					SetLength(BUF, FParent.FCurrentDFS);
-					try
-						NR := DecompressorBZ2.Read(BUF[1], FParent.FCurrentDFS);
-						if NR = FParent.FCurrentDFS then
-							TFS.Write(BUF[1], FParent.FCurrentDFS);
-					finally
-						DecompressorBZ2.Free;
-					end;
-				end
-{$ENDIF}
-					//****************************************************** STORED
-				else if Item.CompressionMethod = ZipCompressionMethod_Store then
-				begin
-					TFS.CopyFrom(SFS, FParent.FCurrentDFS);
+				decompressor := TZDecompressionStream.Create(sourceStream);
+				decompressor.OnProgress := FParent.OnDecompress;
+				SetLength(BUF, FParent.FCurrentDFS);
+				try
+					NR := Decompressor.Read(BUF[1], FParent.FCurrentDFS);
+					if NR = FParent.FCurrentDFS then
+						targetStream.Write(BUF[1], FParent.FCurrentDFS);
+				finally
+					decompressor.Free;
 				end;
 			end;
-		finally
-			SFS.Free;
+{$IFDEF USE_BZIP2}
+		ZipCompressionMethod_bzip2:
+			begin
+				DecompressorBZ2 := TBZDecompressionStream.Create(sourceStream);
+				DecompressorBZ2.OnProgress := FParent.OnDecompress;
+				SetLength(BUF, FParent.FCurrentDFS);
+				try
+					NR := DecompressorBZ2.Read(BUF[1], FParent.FCurrentDFS);
+					if NR = FParent.FCurrentDFS then
+						targetStream.Write(BUF[1], FParent.FCurrentDFS);
+				finally
+					DecompressorBZ2.Free;
+				end;
+			end
+{$ENDIF}
+		ZipCompressionMethod_Store:
+			begin
+				targetStream.CopyFrom(sourceStream, FParent.FCurrentDFS);
+			end;
 		end;
-	end
-	else
-	begin
-		raise Exception.Create('Cannot process this file: ' + Item.FileName + ' ');
+	finally
+		sourceStream.Free;
 	end;
 end;
 
-procedure TKAZipEntries.InternalExtractToFile(Item: TKAZipEntriesEntry;
-	FileName: string);
+procedure TKAZipEntries.InternalExtractToFile(Item: TKAZipEntriesEntry; FileName: string);
 var
 	TFS: TFileStream;
 	Attr: Integer;
@@ -3878,7 +3882,7 @@ begin
 					8, //memLevel - The default value is 8
 					zsDefault); //strategy
 
-	OutputDebugString('SAMPLING ON');
+//	OutputDebugString('SAMPLING ON');
 
 	//A through-stream that calculates the crc32 of the uncompressed data streaming through it
 	Fcrc32Stream := TCRC32Stream.Create(Fcompressor);
