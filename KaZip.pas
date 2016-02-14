@@ -1,85 +1,92 @@
 unit KAZip;
 
 {
- How to create a zip file:
+	How to create a zip file
+	------------------------
 
-  var
-	zip: TKaZip;
-	zipFile: string;
-  begin
-	zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+	var
+		zip: TKaZip;
+		zipFile: string;
+	begin
+		zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
 
-	zip := TKaZip.Create(nil);
-	zip.CreateZip(zipFile);
-	zip.Open(zipFile);
-	zip.AddFile('C:\DelphiComponents\KaZip\Component\KAZip.pas', 'kazip.pas');
-	zip.Close;
-	zip.Free;
-
- How to add a stream to a zip file:
-  var
-	zip: TKaZip;
-	zipFile: string;
-  begin
-	zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
-
-	zip := TKaZip.Create(nil);
-	zip.CreateZip(zipFile);
-	zip.Open(zipFile);
-	zip.AddStream('Attachment1.jpg', stream);
-	zip.Close;
-	zip.Free;
-
- How to add a string to a zip file:
-  var
-	zip: TKaZip;
-	zipFile: string;
-	data: string;
-	ms: TStringStream;
-  begin
-	zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
-
-	zip := TKaZip.Create(nil);
-	zip.CreateZip(zipFile);
-	zip.Open(zipFile);
-
-	ms := TStringStream.Create('The quick brown fox jumped over the lazy dog then sat on a log');
-	try
-	 zip.AddStream('New Document.txt', stream);
-	finally
-	 ms.Free;
+		zip := TKaZip.Create(nil);
+		zip.CreateZip(zipFile);
+		zip.Open(zipFile);
+		zip.AddFile('C:\DelphiComponents\KaZip\Component\KAZip.pas', 'kazip.pas');
+		zip.Close;
+		zip.Free;
 	end;
-	zip.Close;
-	zip.Free;
 
- How to add a WideString to a zip file (Remember, a widestring is UTF-16 encoded)
+	How to add a stream to a zip file
+	---------------------------------
+	var
+		zip: TKaZip;
+		zipFile: string;
+	begin
+		zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
 
-  var
-	zip: TKaZip;
-	zipFile: string;
-	ms: TStringStream;
-	docxml: WideString;
-  const
-	UTF16BOM = #$FF#$FE; //little-endian (i.e. Intel) order
-  begin
-	zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
-
-	zip := TKaZip.Create(nil);
-	zip.CreateZip(zipFile);
-	zip.Open(zipFile);
-
-	docxml := '<Sample>The quick brown fox jumped over the lazy dog then sat on a log</Sample>';
-	ms := TMemoryStream.Create
-	try
-	 ms.Write(UTF16BOM[1], 2); //Write the UTF-16 Byte Order Mark (optional)
-	 ms.Write(docxml[1], Length(docxml)*2);
-	 zip.AddStream('Mouse.xml', stream);
-	finally
-	 ms.Free;
+		zip := TKaZip.Create(nil);
+		zip.CreateZip(zipFile);
+		zip.Open(zipFile);
+		zip.AddStream('Attachment1.jpg', stream);
+		zip.Close;
+		zip.Free;
 	end;
-	zip.Close;
-	zip.Free;
 
+	How to add a string to a zip file
+	---------------------------------
+	var
+		zip: TKaZip;
+		zipFile: string;
+		data: string;
+		ms: TStringStream;
+	begin
+		zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+		zip := TKaZip.Create(nil);
+		zip.CreateZip(zipFile);
+		zip.Open(zipFile);
+
+		ms := TStringStream.Create('The quick brown fox jumped over the lazy dog then sat on a log');
+		try
+			zip.AddStream('New Document.txt', stream);
+		finally
+			ms.Free;
+		end;
+		zip.Close;
+		zip.Free;
+	end;
+
+	How to add a WideString to a zip file (Remember, a widestring is UTF-16 encoded)
+	-------------------------------------
+
+	var
+		zip: TKaZip;
+		zipFile: string;
+		ms: TStringStream;
+		docxml: WideString;
+	const
+		BOM: WideChar = #$FEFF; //U+FEFF - Zero Width No-Break Space
+	begin
+		zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
+
+		zip := TKaZip.Create(nil);
+		zip.CreateZip(zipFile);
+		zip.Open(zipFile);
+
+		docxml := '<Sample>The quick brown fox jumped over the lazy dog then sat on a log</Sample>';
+		ms := TMemoryStream.Create
+		try
+			ms.Write(BOM, SizeOf(WideChar)); //Write the UTF-16 Byte Order Mark (optional)
+			ms.Write(docxml[1], Length(docxml)*SizeOf(Widechar));
+			zip.AddStream('Mouse.xml', ms);
+		finally
+			ms.Free;
+		end;
+		zip.Close;
+		zip.Free;
+	end;
 }
 
 interface
@@ -124,6 +131,37 @@ const
 	ZipCompressionMethod_WavPack= 		97; //WavPack compressed data
 	ZipCompressionMethod_PPMd = 			98; //PPMd version I, Rev 1
 
+	//General Purpose Flags
+type
+	TGeneralPurposeFlags = Word;
+const
+	GPF_IsEncrypted = 							$0001; //Bit 00: encrypted file
+	GPF_CompressionOption = 					$0006; //Bit 01-02: compression options
+																 {	For methods 8 and 9 (Deflate):
+																		00: Normal compression option was used. (ZL_DEFAULT_COMPRESSION)
+																		01: Maximum compression option was used. (ZL_MAXIMUM_COMPRESSION)
+																		10: Fast compression option was used. (ZL_FAST_COMPRESSION)
+																		11: Super Fast compression option was used. (ZL_FASTEST_COMPRESSION)
+																	For method 6 (Imploding)
+																		Bit 1: 8K sliding dictionary was used, otherwise 4K sliding dictionary was used
+																		Bit 2: 3 Shannon-Fano trees were used to encode the sliding dictionary output, otherwise 2 Shanno-Fano trees were used to encode the sliding dictionary
+																	For method 14 (LZMA)
+																		Bit 1: an end-of-stream (EOS) marker is used to mark the end of the compressed data stream. If clear, then an EOS marker is not present and the compressed data size must be known to extract.
+																		Bit 2: undefined
+																	Any other method:
+																		Bit 1: undefined
+																		Bit 2: undefined
+																	}
+	GPF_DataDescriptor = 						$0008; //Bit 03: data descriptor
+	GPF_EnhancedDeflation = 					$0010; //Bit 04: enhanced deflation
+	GPF_CompressedPatchedData = 				$0020; //Bit 05: compressed patched data
+	GPF_StrongEncryption = 						$0040; //Bit 06: strong encryption
+																 //Bit 07-10: unused
+	GPF_LanguageEncoding = 						$0800; //Bit 11: language encoding
+																 //Bit 12: reserved
+	GPF_MaskHeaderValues = 						$0200; //Bit 13: mask header values
+																 //Bit 14-15: reserved
+
 type
 	TOnDecompressFile = procedure(Sender: TObject; Current, Total: Integer) of object;
 	TOnCompressFile = procedure(Sender: TObject; Current, Total: Integer) of object;
@@ -136,7 +174,8 @@ type
 
 	TKAZipEntries = class;
 	TKAZip = class;
-	TBytes = array of Byte;
+//	TBytes = System.TBytes; // = Types.TByteDynArray;
+	TZipString = type Utf8String;
 
 
 	{DoChange Events
@@ -150,9 +189,9 @@ type
 	}
 
 	TLocalFile = packed record
-		LocalFileHeaderSignature: Cardinal; //    4 bytes  = 0x04034b50 = 'PK'#03#04
-		VersionNeededToExtract: WORD; //    2 bytes
-		GeneralPurposeBitFlag: WORD; //    2 bytes
+		LocalFileHeaderSignature: Cardinal; //4 bytes = 0x04034b50 = 'PK'#03#04
+		VersionNeededToExtract: WORD; //2 bytes
+		GeneralPurposeBitFlag: TGeneralPurposeFlags; //2 bytes
 		CompressionMethod: TZipCompressionMethod; //    2 bytes
 		LastModFileTimeDate: Cardinal; //    4 bytes
 		Crc32: Cardinal; //    4 bytes
@@ -161,8 +200,8 @@ type
 		FilenameLength: WORD; //    2 bytes
 		ExtraFieldLength: WORD; //    2 bytes
 		//Data layout up to this point matches the actual ZIP format. Remaining fields are extra
-		FileName: AnsiString; //    variable size
-		ExtraField: AnsiString; //    variable size
+		FileName: TZipString; //    variable size
+		ExtraField: AnsiString; //    variable size, ExtraField is for arbitrary binary data
 		CompressedData: AnsiString; //    variable size
 	end;
 
@@ -173,11 +212,12 @@ type
 		UncompressedSize: Cardinal; //    4 bytes
 	end;
 
+	//Internal structure only
 	TCentralDirectoryFile = packed record
 		CentralFileHeaderSignature: Cardinal; //    4 bytes = 0x02014b50 = 'PK'#01#02
 		VersionMadeBy: WORD; //    2 bytes
 		VersionNeededToExtract: WORD; //    2 bytes
-		GeneralPurposeBitFlag: WORD; //    2 bytes
+		GeneralPurposeBitFlag: TGeneralPurposeFlags; //    2 bytes
 		CompressionMethod: TZipCompressionMethod; //    2 bytes
 		LastModFileTimeDate: Cardinal; //    4 bytes
 		Crc32: Cardinal; //    4 bytes
@@ -190,9 +230,9 @@ type
 		InternalFileAttributes: WORD; //    2 bytes
 		ExternalFileAttributes: Cardinal; //    4 bytes
 		RelativeOffsetOfLocalHeader: Cardinal; //    4 bytes
-		FileName: AnsiString; //    variable size
+		FileName: TZipString; //    variable size
 		ExtraField: AnsiString; //    variable size
-		FileComment: AnsiString; //    variable size
+		FileComment: TZipString; //    variable size
 	end;
 
 	TEndOfCentralDir = packed record
@@ -220,8 +260,10 @@ type
 		procedure SetSelected(const Value: Boolean);
 		function GetLocalEntrySize: Cardinal;
 		function GetCentralEntrySize: Cardinal;
-		procedure SetComment(const Value: string);
-		procedure SetFileName(const Value: string);
+		function GetFileName: UnicodeString;
+		procedure SetFileName(const Value: UnicodeString);
+		function GetComment: UnicodeString;
+		procedure SetComment(const Value: UnicodeString);
 	public
 		constructor Create(Collection: TCollection); override;
 		destructor Destroy; override;
@@ -233,8 +275,8 @@ type
 		procedure SaveToStream(Stream: TStream);
 		function Test: Boolean;
 
-		property FileName: string read FCentralDirectoryFile.FileName write SetFileName;
-		property Comment: string read FCentralDirectoryFile.FileComment write SetComment;
+		property FileName: UnicodeString read GetFileName write SetFileName;
+		property Comment: UnicodeString read GetComment write SetComment;
 		property SizeUncompressed: Cardinal read FCentralDirectoryFile.UncompressedSize;
 		property SizeCompressed: Cardinal read FCentralDirectoryFile.CompressedSize;
 		property Date: TDateTime read FDate;
@@ -243,7 +285,7 @@ type
 		property LocalOffset: Cardinal read FCentralDirectoryFile.RelativeOffsetOfLocalHeader;
 		property IsEncrypted: Boolean read FIsEncrypted;
 		property IsFolder: Boolean read FIsFolder;
-		property BitFlag: Word read FCentralDirectoryFile.GeneralPurposeBitFlag;
+		property BitFlag: TGeneralPurposeFlags read FCentralDirectoryFile.GeneralPurposeBitFlag;
 		property CompressionMethod: TZipCompressionMethod read FCentralDirectoryFile.CompressionMethod;
 		property CompressionType: TZipCompressionType read FCompressionType;
 		property LocalEntrySize: Cardinal read GetLocalEntrySize;
@@ -281,7 +323,7 @@ type
 		procedure RemoveBatch(Files: TList);
 		procedure InternalExtractToFile(Item: TKAZipEntriesEntry; FileName: string);
 		//**************************************************************************
-		function AddStreamFast(ItemName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry; overload;
+		function AddStreamFast(ItemName: string; FileAttr: Word; FileDate: TDateTime; SourceStream: TStream): TKAZipEntriesEntry; overload;
 		function AddStreamRebuild(ItemName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry;
 		function AddFolderChain(ItemName: string): Boolean; overload;
 		function AddFolderChain(ItemName: string; FileAttr: Word; FileDate: TDateTime): Boolean; overload;
@@ -437,8 +479,8 @@ type
 		function AddFiles(FileNames: TStrings): Boolean;
 		function AddFolder(FolderName: string; RootFolder: string; WildCard: string; WithSubFolders: Boolean): Boolean;
 		function AddFilesAndFolders(FileNames: TStrings; RootFolder: string; WithSubFolders: Boolean): Boolean;
-		function AddStream(FileName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry; overload;
-		function AddStream(FileName: string; Stream: TStream): TKAZipEntriesEntry; overload;
+		function AddStream(FileName: string; FileAttr: Word; FileDate: TDateTime; SourceStream: TStream): TKAZipEntriesEntry; overload;
+		function AddStream(FileName: string; SourceStream: TStream): TKAZipEntriesEntry; overload;
 
 		function AddEntryThroughStream(FileName: string): TStream; overload;
 		function AddEntryThroughStream(FileName: string; FileDate: TDateTime; FileAttr: Word): TStream; overload;
@@ -543,14 +585,10 @@ type
 
 
 procedure Register;
-function ToZipName(FileName: string): string;
+function ToZipName(FileName: UnicodeString): TZipString;
 function ToDosName(FileName: string): string;
 
 implementation
-
-uses
-	FileCtrl;
-
 
 	{
 		We use Zip compression method 8 (Deflate).
@@ -656,7 +694,7 @@ begin
 	RegisterComponents('KA', [TKAZip]);
 end;
 
-function ToZipName(FileName: string): string;
+function ToZipName(FileName: UnicodeString): TZipString;
 var
 	P: Integer;
 begin
@@ -709,6 +747,16 @@ begin
 	Result := StringReplace(Result, '/', '\', [rfReplaceAll]);
 end;
 
+{ TTempFileStream }
+type
+	TTempFileStream = class(TFileStream)
+	protected
+		function GetTemporaryFilename: string;
+	public
+		constructor Create(FlagsAndAttributes: DWORD); overload;
+		destructor Destroy; override;
+	end;
+
 { TKAZipEntriesEntry }
 
 constructor TKAZipEntriesEntry.Create(Collection: TCollection);
@@ -744,6 +792,11 @@ begin
 	ExtractToStream(Stream);
 end;
 
+function TKAZipEntriesEntry.GetComment: UnicodeString;
+begin
+	Result := UnicodeString(FCentralDirectoryFile.FileComment);
+end;
+
 function TKAZipEntriesEntry.GetCompressedData(Stream: TStream): Integer;
 var
 	ZLHeader: TZLibStreamHeader;
@@ -762,13 +815,13 @@ begin
 		ZLHeader.CMF := ZL_CompressionMethod_Deflate; { Deflate }
 		ZLHeader.CMF := ZLHeader.CMF or (ZL_Deflate_CompressionInfo_DefaultWindowSize shl 4); { 32k Window size }
 		compress := ZL_DEFAULT_COMPRESSION;
-		case BitFlag and 6 of
-		0: Compress := ZL_DEFAULT_COMPRESSION;
-		2: Compress := ZL_MAXIMUM_COMPRESSION;
-		4: Compress := ZL_FAST_COMPRESSION;
-		6: Compress := ZL_FASTEST_COMPRESSION;
+		case (BitFlag and GPF_CompressionOption) of
+		0: compress := ZL_DEFAULT_COMPRESSION;
+		2: compress := ZL_MAXIMUM_COMPRESSION;
+		4: compress := ZL_FAST_COMPRESSION;
+		6: compress := ZL_FASTEST_COMPRESSION;
 		end;
-		ZLHeader.FLG := ZLHeader.FLG or (Compress shl 6);
+		ZLHeader.FLG := ZLHeader.FLG or (compress shl 6);
 		ZLHeader.FLG := ZLHeader.FLG and not ZL_PRESET_DICT; { no preset dictionary}
 		ZLHeader.FLG := ZLHeader.FLG and not ZL_FCHECK_MASK;
 		ZLH := (ZLHeader.CMF * 256) + ZLHeader.FLG;
@@ -786,6 +839,11 @@ begin
 	end;
 	if SizeCompressed > 0 then
 		Result := Result + Stream.Write(BA.CompressedData[1], SizeCompressed);
+end;
+
+function TKAZipEntriesEntry.GetFileName: UnicodeString;
+begin
+	Result := UnicodeString(FCentralDirectoryFile.FileName);
 end;
 
 function TKAZipEntriesEntry.GetCompressedData: AnsiString;
@@ -808,7 +866,7 @@ begin
 				ZLHeader.CMF := ZL_CompressionMethod_Deflate; { Deflate }
 				ZLHeader.CMF := ZLHeader.CMF or (ZL_Deflate_CompressionInfo_DefaultWindowSize shl 4); { 32k Window size }
 				Compress := ZL_DEFAULT_COMPRESSION;
-				case BitFlag and 6 of
+				case BitFlag and GPF_CompressionOption of
 				0: Compress := ZL_DEFAULT_COMPRESSION;
 				2: Compress := ZL_MAXIMUM_COMPRESSION;
 				4: Compress := ZL_FAST_COMPRESSION;
@@ -838,10 +896,9 @@ begin
 			FCentralDirectoryFile.CompressedSize +
 			FCentralDirectoryFile.FilenameLength +
 			FCentralDirectoryFile.ExtraFieldLength;
-	if (FCentralDirectoryFile.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
-	begin
+
+	if (FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_DataDescriptor) <> 0 then
 		Result := Result + SizeOf(TDataDescriptor);
-	end;
 end;
 
 function TKAZipEntriesEntry.GetCentralEntrySize: Cardinal;
@@ -854,9 +911,8 @@ end;
 
 function TKAZipEntriesEntry.Test: Boolean;
 var
-	FS: TFileStream;
-	MS: TMemoryStream;
-	FN: string;
+	stm: TStream;
+	tempFilename: string;
 begin
 	Result := True;
 	try
@@ -864,26 +920,26 @@ begin
 		begin
 			if FParent.FParent.FUseTempFiles then
 			begin
-				FN := FParent.FParent.GetDelphiTempFileName;
-				FS := TFileStream.Create(FN, fmOpenReadWrite or FmCreate);
+				tempFilename := FParent.FParent.GetDelphiTempFileName;
+				stm := TTempFileStream.Create(tempFilename, fmOpenReadWrite or FmCreate);
 				try
-					ExtractToStream(FS);
-					FS.Position := 0;
-					Result := FParent.CalculateCRCFromStream(FS) = CRC32;
+					ExtractToStream(stm);
+					stm.Position := 0;
+					Result := (FParent.CalculateCRCFromStream(stm) = CRC32);
 				finally
-					FS.Free;
-					DeleteFile(FN);
+					stm.Free;
+					DeleteFile(tempFilename);
 				end;
 			end
 			else
 			begin
-				MS := TMemoryStream.Create;
+				stm := TMemoryStream.Create;
 				try
-					ExtractToStream(MS);
-					MS.Position := 0;
-					Result := FParent.CalculateCRCFromStream(MS) = CRC32;
+					ExtractToStream(stm);
+					stm.Position := 0;
+					Result := (FParent.CalculateCRCFromStream(stm) = CRC32);
 				finally
-					MS.Free;
+					stm.Free;
 				end;
 			end;
 		end;
@@ -892,7 +948,7 @@ begin
 	end;
 end;
 
-procedure TKAZipEntriesEntry.SetComment(const Value: string);
+procedure TKAZipEntriesEntry.SetComment(const Value: UnicodeString);
 begin
 	FCentralDirectoryFile.FileComment := Value;
 	FCentralDirectoryFile.FileCommentLength := Length(FCentralDirectoryFile.FileComment);
@@ -903,15 +959,16 @@ begin
 	end;
 end;
 
-procedure TKAZipEntriesEntry.SetFileName(const Value: string);
+procedure TKAZipEntriesEntry.SetFileName(const Value: UnicodeString);
 var
-	FN: string;
+	fn: string;
 begin
-	FN := ToZipName(Value);
+	fn := ToZipName(Value);
 	if FParent.IndexOf(FN) > -1 then
-		raise Exception.Create('File with same name already exists in Archive!');
-	FCentralDirectoryFile.FileName := ToZipName(Value);
-	FCentralDirectoryFile.FilenameLength := Length(FCentralDirectoryFile.FileName);
+		raise Exception.Create('File with same name already exists in Archive');
+
+	FCentralDirectoryFile.FileName := fn;
+	FCentralDirectoryFile.FilenameLength := Length(fn);
 	if not FParent.FParent.FBatchMode then
 	begin
 		FParent.Rebuild;
@@ -1152,7 +1209,7 @@ end;
 function TKAZipEntries.ParseCentralHeaders(MS: TStream): Boolean;
 var
 	X: Integer;
-	Entry: TKAZipEntriesEntry;
+	entry: TKAZipEntriesEntry;
 	CDFile: TCentralDirectoryFile;
 begin
 	Result := False;
@@ -1163,12 +1220,9 @@ begin
 			//FillCh ar(CDFile, SizeOf(TCentralDirectoryFile), 0);  20140320: Filling a record containing managed types will cause a leak
 			cdFile := Default_TCentralDirectoryFile;
 			MS.Read(CDFile, SizeOf(TCentralDirectoryFile) - 3 * SizeOf(string));
-			Entry := TKAZipEntriesEntry.Create(Self);
-			Entry.FDate := FileDateToDateTime(CDFile.LastModFileTimeDate);
-			if (CDFile.GeneralPurposeBitFlag and 1) > 0 then
-				Entry.FIsEncrypted := True
-			else
-				Entry.FIsEncrypted := False;
+			entry := TKAZipEntriesEntry.Create(Self);
+			entry.FDate := FileDateToDateTime(CDFile.LastModFileTimeDate);
+			entry.FIsEncrypted := ((CDFile.GeneralPurposeBitFlag and GPF_IsEncrypted) <> 0);
 			if CDFile.FilenameLength > 0 then
 			begin
 				SetLength(CDFile.FileName, CDFile.FilenameLength);
@@ -1184,19 +1238,19 @@ begin
 				SetLength(CDFile.FileComment, CDFile.FileCommentLength);
 				MS.Read(CDFile.FileComment[1], CDFile.FileCommentLength);
 			end;
-			Entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
+			entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
 
-			Entry.FCompressionType := ctUnknown;
+			entry.FCompressionType := ctUnknown;
 			if (CDFile.CompressionMethod = ZipCompressionMethod_Deflate) or (CDFile.CompressionMethod = ZipCompressionMethod_Deflate64) then
 			begin
-				case CDFile.GeneralPurposeBitFlag and 6 of
-				0: Entry.FCompressionType := ctNormal;
-				2: Entry.FCompressionType := ctMaximum;
-				4: Entry.FCompressionType := ctFast;
-				6: Entry.FCompressionType := ctSuperFast
+				case CDFile.GeneralPurposeBitFlag and GPF_CompressionOption of
+				0: entry.FCompressionType := ctNormal;
+				2: entry.FCompressionType := ctMaximum;
+				4: entry.FCompressionType := ctFast;
+				6: entry.FCompressionType := ctSuperFast
 				end;
 			end;
-			Entry.FCentralDirectoryFile := CDFile;
+			entry.FCentralDirectoryFile := CDFile;
 			if Assigned(FParent.FOnZipOpen) then
 				FParent.FOnZipOpen(FParent, X, FParent.FEndOfCentralDir.TotalNumberOfEntriesOnThisDisk);
 		end;
@@ -1261,7 +1315,7 @@ begin
 		SetLength(Result.ExtraField, Result.ExtraFieldLength);
 		MS.Read(Result.ExtraField[1], Result.ExtraFieldLength);
 	end;
-	if (Result.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
+	if (Result.GeneralPurposeBitFlag and GPF_DataDescriptor) <> 0 then
 	begin
 		MS.Read(DataDescriptor, SizeOf(TDataDescriptor));
 		Result.Crc32 := DataDescriptor.Crc32;
@@ -1300,7 +1354,7 @@ var
 	Byte_: array[0..4] of Byte;
 	LocalFile: TLocalFile;
 	DataDescriptor: TDataDescriptor;
-	Entry: TKAZipEntriesEntry;
+	entry: TKAZipEntriesEntry;
 	CDFile: TCentralDirectoryFile;
 	CDSize: Cardinal;
 	L: Integer;
@@ -1337,7 +1391,7 @@ begin
 					SetLength(LocalFile.ExtraField, LocalFile.ExtraFieldLength);
 					MS.Read(LocalFile.ExtraField[1], LocalFile.ExtraFieldLength);
 				end;
-				if (LocalFile.GeneralPurposeBitFlag and (1 shl 3)) > 0 then
+				if (LocalFile.GeneralPurposeBitFlag and GPF_DataDescriptor) <> 0 then
 				begin
 					MS.Read(DataDescriptor, SizeOf(TDataDescriptor));
 					LocalFile.Crc32 := DataDescriptor.Crc32;
@@ -1374,27 +1428,24 @@ begin
 				CDFile.ExtraField := LocalFile.ExtraField;
 				CDFile.FileComment := '';
 
-				Entry := TKAZipEntriesEntry.Create(Self);
-				Entry.FDate := FileDateToDateTime(CDFile.LastModFileTimeDate);
-				if (CDFile.GeneralPurposeBitFlag and 1) > 0 then
-					Entry.FIsEncrypted := True
-				else
-					Entry.FIsEncrypted := False;
-				Entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
-				Entry.FCompressionType := ctUnknown;
+				entry := TKAZipEntriesEntry.Create(Self);
+				entry.FDate := FileDateToDateTime(CDFile.LastModFileTimeDate);
+				entry.FIsEncrypted := ((CDFile.GeneralPurposeBitFlag and GPF_IsEncrypted) <> 0);
+				entry.FIsFolder := (CDFile.ExternalFileAttributes and faDirectory) > 0;
+				entry.FCompressionType := ctUnknown;
 				if (CDFile.CompressionMethod = ZipCompressionMethod_Deflate) or (CDFile.CompressionMethod = ZipCompressionMethod_Deflate64) then
 				begin
-					case CDFile.GeneralPurposeBitFlag and 6 of
-					0: Entry.FCompressionType := ctNormal;
-					2: Entry.FCompressionType := ctMaximum;
-					4: Entry.FCompressionType := ctFast;
-					6: Entry.FCompressionType := ctSuperFast
+					case CDFile.GeneralPurposeBitFlag and GPF_CompressionOption of
+					0: entry.FCompressionType := ctNormal;
+					2: entry.FCompressionType := ctMaximum;
+					4: entry.FCompressionType := ctFast;
+					6: entry.FCompressionType := ctSuperFast
 					end;
 				end;
-				Entry.FCentralDirectoryFile := CDFile;
+				entry.FCentralDirectoryFile := CDFile;
 				Poz := MS.Position;
 				Inc(NLE);
-				CDSize := CDSize + Entry.CentralEntrySize;
+				CDSize := CDSize + entry.CentralEntrySize;
 			end;
 		until NoMore;
 
@@ -1415,40 +1466,22 @@ var
 	TempStream: TFileStream;
 	TempMSStream: TMemoryStream;
 	TempFileName: string;
-//	BUF: string;
-	ZipComment: string;
-	OSL: Cardinal;
+	zipComment: string;
+	oldStreamSize: Cardinal;
 	//*********************************************
 	X: Integer;
 	TargetPos: Cardinal;
 	Border: Cardinal;
-
-//	NR: Integer;
-//	NW: Integer;
-//	BufStart: Integer;
-//	BufLen: Integer;
 	ShiftSize: Cardinal;
 	NewSize: Cardinal;
 begin
 	TargetPos := Items[ItemIndex].FCentralDirectoryFile.RelativeOffsetOfLocalHeader;
 	ShiftSize := Items[ItemIndex].LocalEntrySize;
-//	BufStart := TargetPos + ShiftSize;
-//	BufLen := FParent.FZipStream.Size - BufStart;
 	Border := TargetPos;
 	Delete(ItemIndex);
 	if (FParent.FZipSaveMethod = FastSave) and (Count > 0) then
 	begin
-		ZipComment := FParent.Comment.Text;
-
-{
-		SetLength(BUF,BufLen);
-		FParent.FZipStream.Position := BufStart;
-		NR := FParent.FZipStream.Read(BUF[1],BufLen);
-
-		FParent.FZipStream.Position := TargetPos;
-		NW := FParent.FZipStream.Write(BUF[1],BufLen);
-		SetLength(BUF,0);
-	}
+		zipComment := FParent.Comment.Text;
 
 		for X := 0 to Count - 1 do
 		begin
@@ -1460,9 +1493,11 @@ begin
 		end;
 
 		FParent.FZipStream.Position := TargetPos;
-		//************************************ MARK START OF CENTRAL DIRECTORY
+
+		//MARK START OF CENTRAL DIRECTORY
 		FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory := FParent.FZipStream.Position;
-		//************************************ SAVE CENTRAL DIRECTORY
+
+		//SAVE CENTRAL DIRECTORY
 		for X := 0 to Count - 1 do
 		begin
 			FParent.FZipStream.Write(Self.Items[X].FCentralDirectoryFile, SizeOf(Self.Items[X].FCentralDirectoryFile) - 3 * SizeOf(string));
@@ -1473,18 +1508,21 @@ begin
 			if Self.Items[X].FCentralDirectoryFile.FileCommentLength > 0 then
 				FParent.FZipStream.Write(Self.Items[X].FCentralDirectoryFile.FileComment[1], Self.Items[X].FCentralDirectoryFile.FileCommentLength);
 		end;
-		//************************************ SAVE END CENTRAL DIRECTORY RECORD
+
+		//SAVE END CENTRAL DIRECTORY RECORD
 		FParent.FEndOfCentralDirPos := FParent.FZipStream.Position;
 		FParent.FEndOfCentralDir.SizeOfTheCentralDirectory := FParent.FEndOfCentralDirPos - FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 		Dec(FParent.FEndOfCentralDir.TotalNumberOfEntriesOnThisDisk);
 		Dec(FParent.FEndOfCentralDir.TotalNumberOfEntries);
 		FParent.FZipStream.Write(FParent.FEndOfCentralDir, SizeOf(TEndOfCentralDir));
-		//************************************ SAVE ZIP COMMENT IF ANY
+
+		//SAVE ZIP COMMENT IF ANY
 		FParent.FZipCommentPos := FParent.FZipStream.Position;
-		if Length(ZipComment) > 0 then
+		if Length(zipComment) > 0 then
 		begin
-			FParent.FZipStream.Write(ZipComment[1], Length(ZipComment));
+			FParent.FZipStream.Write(zipComment[1], Length(zipComment));
 		end;
+
 		FParent.FZipStream.Size := FParent.FZipStream.Position;
 	end
 	else
@@ -1492,22 +1530,22 @@ begin
 		if FParent.FUseTempFiles then
 		begin
 			TempFileName := FParent.GetDelphiTempFileName;
-			TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
+			TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
 			try
 				FParent.SaveToStream(TempStream);
 				TempStream.Position := 0;
-				OSL := FParent.FZipStream.Size;
+				oldStreamSize := FParent.FZipStream.Size;
 				try
 					FParent.FZipStream.Size := TempStream.Size;
 				except
-					FParent.FZipStream.Size := OSL;
+					FParent.FZipStream.Size := oldStreamSize;
 					raise;
 				end;
 				FParent.FZipStream.Position := 0;
 				FParent.FZipStream.CopyFrom(TempStream, TempStream.Size);
+
 				//*********************************************************************
 				FParent.FZipHeader.ParseZip(FParent.FZipStream);
-				//*********************************************************************
 			finally
 				TempStream.Free;
 				DeleteFile(TempFileName)
@@ -1529,28 +1567,28 @@ begin
 				TempMSStream.Position := 0;
 				FParent.SaveToStream(TempMSStream);
 				TempMSStream.Position := 0;
-				OSL := FParent.FZipStream.Size;
+				oldStreamSize := FParent.FZipStream.Size;
 				try
 					FParent.FZipStream.Size := TempMSStream.Size;
 				except
-					FParent.FZipStream.Size := OSL;
+					FParent.FZipStream.Size := oldStreamSize;
 					raise;
 				end;
 				FParent.FZipStream.Position := 0;
 				FParent.FZipStream.CopyFrom(TempMSStream, TempMSStream.Size);
+
 				//*********************************************************************
 				FParent.FZipHeader.ParseZip(FParent.FZipStream);
-				//*********************************************************************
 			finally
 				TempMSStream.Free;
 			end;
 		end;
 	end;
+
 	FParent.FIsDirty := True;
+
 	if not FParent.FBatchMode then
-	begin
 		FParent.DoChange(FParent, 3);
-	end;
 end;
 
 procedure TKAZipEntries.Remove(ItemIndex: Integer);
@@ -1584,7 +1622,7 @@ end;
 procedure TKAZipEntries.RemoveBatch(Files: TList);
 var
 	X: Integer;
-	OSL: Integer;
+	oldStreamSize: Integer;
 	NewSize: Cardinal;
 	TempStream: TFileStream;
 	TempMSStream: TMemoryStream;
@@ -1600,15 +1638,15 @@ begin
 	if FParent.FUseTempFiles then
 	begin
 		TempFileName := FParent.GetDelphiTempFileName;
-		TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
+		TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite);
 		try
 			FParent.SaveToStream(TempStream);
 			TempStream.Position := 0;
-			OSL := FParent.FZipStream.Size;
+			oldStreamSize := FParent.FZipStream.Size;
 			try
 				FParent.FZipStream.Size := TempStream.Size;
 			except
-				FParent.FZipStream.Size := OSL;
+				FParent.FZipStream.Size := oldStreamSize;
 				raise;
 			end;
 			FParent.FZipStream.Position := 0;
@@ -1636,11 +1674,11 @@ begin
 			TempMSStream.Position := 0;
 			FParent.SaveToStream(TempMSStream);
 			TempMSStream.Position := 0;
-			OSL := FParent.FZipStream.Size;
+			oldStreamSize := FParent.FZipStream.Size;
 			try
 				FParent.FZipStream.Size := TempMSStream.Size;
 			except
-				FParent.FZipStream.Size := OSL;
+				FParent.FZipStream.Size := oldStreamSize;
 				raise;
 			end;
 			FParent.FZipStream.Position := 0;
@@ -1657,13 +1695,14 @@ end;
 function TKAZipEntries.IndexOf(const FileName: string): Integer;
 var
 	X: Integer;
-	FN: string;
+	fn: string;
 begin
 	Result := -1;
-	FN := ToZipName(FileName);
+
+	fn := ToZipName(FileName);
 	for X := 0 to Count - 1 do
 	begin
-		if AnsiCompareText(FN, ToZipName(Items[X].FCentralDirectoryFile.FileName)) = 0 then
+		if AnsiCompareText(fn, ToZipName(Items[X].FCentralDirectoryFile.FileName)) = 0 then
 		begin
 			Result := X;
 			Exit;
@@ -1671,44 +1710,46 @@ begin
 	end;
 end;
 
-function TKAZipEntries.AddStreamFast(ItemName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry;
+function TKAZipEntries.AddStreamFast(ItemName: string; FileAttr: Word; FileDate: TDateTime; SourceStream: TStream): TKAZipEntriesEntry;
 var
 	compressor: TZCompressionStream;
-//	CS: TStringStream;
 	compressionMode: Word;
-//	S: string;
 	i: Integer;
 	uncompressedLength: Integer;
 	compressedLength: Integer;
 	dataCrc32: LongWord;
-//	sizeToAppend: Integer;
 	zipComment: string;
 	compressionLevel: TZCompressionLevel;
-	OBM: Boolean;
+	oldBatchMode: Boolean;
 	crc32Stream: TCRC32Stream;
 	newLocalEntryPosition: Int64;
 	startOfCompressedDataPosition: Int64;
 	centralDirectoryPosition: Int64;
 begin
-	//*********************************** COMPRESS DATA
+	{
+		Earlier versions of KaZip loaded the entire stream to be compressed into memory.
+		This can quickly fill up the 2 GB virtual address space of the process.
+
+		This method, AddStreamFast, is used to directly compress data from a source stream into a zip entry.
+	}
 	zipComment := FParent.Comment.Text;
 
 	if not FParent.FStoreRelativePath then
 		ItemName := ExtractFileName(ItemName);
 
-	ItemName := ToZipName(ItemName);
+	ItemName := ToZipName(ItemName); //standardize ItemName into Zip allowed filenames
 
 	//If an item with this name already exists then remove it
 	i := Self.IndexOf(ItemName);
 	if i >= 0 then
 	begin
-		OBM := FParent.FBatchMode;
+		oldBatchMode := FParent.FBatchMode;
 		try
-			if OBM = False then
+			if not FParent.FBatchMode then
 				FParent.FBatchMode := True;
 			Remove(i);
 		finally
-			FParent.FBatchMode := OBM;
+			FParent.FBatchMode := oldBatchMode;
 		end;
 	end;
 
@@ -1716,12 +1757,8 @@ begin
 	//We overwrite the central direct (and EOCD marker) and then re-write them after the end of the file
 	newLocalEntryPosition := FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 
-	uncompressedLength := Stream.Size - Stream.Position;
+	uncompressedLength := SourceStream.Size - SourceStream.Position;
 	FParent.FCurrentDFS := uncompressedLength;
-
-
-	dataCrc32 := 0; //we don't know it yet; back-fill it
-//	compressedLength := 0; //we don't know it yet; back-fill it
 
 	if uncompressedLength > 0 then
 		compressionMode := ZipCompressionMethod_Deflate
@@ -1755,6 +1792,7 @@ begin
 	//Now stream the compressed data
 	startOfCompressedDataPosition := FParent.FZipStream.Position;
 
+	dataCrc32 := 0; //we don't know it yet; but we have to declare the variable
 	if compressionMode = ZipCompressionMethod_Deflate then
 	begin
 		//The zlib compression level to use
@@ -1768,16 +1806,17 @@ begin
 			compressionLevel := zcDefault;
 		end;
 
-		{
-			We don't have access to a DEFLATE compressor.
-			The best we have in ZLIB, which in turn uses DEFLATE.
-			But zlib added 2 leading bytes, and 4 trailing bytes, that we need to strip off
-				Skip first two zlib bytes  (RFC1950)
-						CMF (Compression Method and flags)
-						FLG (FLaGs)
-				and final four bytes
-						ADLER32 (Adler-32 checksum)
-		}
+	{
+		The standard ZLIB compresor does DEFLATE compression, but it adds a 2 byte header and 4 byte trailer
+			header:
+					CMF (Compression Method and flags)
+					FLG (FLaGs)
+			and final four bytes
+					ADLER32 (Adler-32 checksum)
+
+			There is a hack in zlib where if we specify a *negative* window size, it will use that to mean
+			that we don't want it to add a header.
+	}
 //		OutputDebugString('SAMPLING ON');
 		compressor := TZCompressionStream.Create(FParent.FZipStream, compressionLevel,
 					-15, //windowBits - The default value is 15 if deflateInit is used instead.
@@ -1786,10 +1825,17 @@ begin
 		try
 			compressor.OnProgress := FParent.OnCompress;
 
-			//A through-stream that calculates the crc32 of the uncompressed data streaming through it
+			{
+				A through-stream that calculates the crc32 of the uncompressed data streaming through it.
+				This way we don't have to either store all the uncompressed data in memory,
+				or back up the stream and scan it all again.
+
+				Data flowing from the SourceStream into the ZCompressionStream passes through the CRC32Stream.
+				This calculates the CRC32 on the fly.
+			}
 			crc32Stream := TCRC32Stream.Create(compressor);
 			try
-				crc32Stream.CopyFrom(Stream, uncompressedLength);
+				crc32Stream.CopyFrom(SourceStream, uncompressedLength);
 				dataCrc32 := crc32Stream.CRC32;
 			finally
 				crc32Stream.Free;
@@ -1800,9 +1846,9 @@ begin
 //		OutputDebugString('SAMPLING OFF');
 	end;
 
-	//The central directory will start here; just after the file we just wrote
-	//Memorize it now, because we're going to backtrack and update the CRC and compressed size
-	//also because we can use it to figure out the compressed size
+	//The central directory will start here - just after the file we just wrote.
+	//Memorize it now, because we're going to backtrack and update the CRC and compressed size.
+	//Also because we can use it to figure out the compressed size
 	centralDirectoryPosition := FParent.FZipStream.Position;
 	try
 		compressedLength := (centralDirectoryPosition - startOfCompressedDataPosition);
@@ -1869,15 +1915,12 @@ begin
 
 	Result.FDate := FileDate;
 
-	if (Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 1) > 0 then
-		Result.FIsEncrypted := True
-	else
-		Result.FIsEncrypted := False;
-	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) > 0;
+	Result.FIsEncrypted := ((Result.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_IsEncrypted) <> 0);
+	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) <> 0;
 	Result.FCompressionType := ctUnknown;
 	if (Result.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate) or (Result.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate64) then
 	begin
-		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 6 of
+		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_CompressionOption of
 		0: Result.FCompressionType := ctNormal;
 		2: Result.FCompressionType := ctMaximum;
 		4: Result.FCompressionType := ctFast;
@@ -1891,10 +1934,7 @@ begin
 	end;
 end;
 
-function TKAZipEntries.AddStreamRebuild(ItemName: string;
-	FileAttr: Word;
-	FileDate: TDateTime;
-	Stream: TStream): TKAZipEntriesEntry;
+function TKAZipEntries.AddStreamRebuild(ItemName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry;
 var
 	Compressor: TZCompressionStream;
 	CS: TStringStream;
@@ -1905,7 +1945,7 @@ var
 	I: Integer;
 	X: Integer;
 	FCRC32: Cardinal;
-	OSL: Cardinal;
+	oldStreamSize: Cardinal;
 	NewSize: Cardinal;
 	ZipComment: string;
 	TempStream: TFileStream;
@@ -1917,7 +1957,7 @@ begin
 	if FParent.FUseTempFiles then
 	begin
 		TempFileName := FParent.GetDelphiTempFileName;
-		TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
+		TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite);
 		try
 			//*********************************** SAVE ALL OLD LOCAL ITEMS
 			FParent.RebuildLocalFiles(TempStream);
@@ -2033,11 +2073,11 @@ begin
 			FParent.RebuildEndOfCentralDirectory(TempStream);
 			//************************************
 			TempStream.Position := 0;
-			OSL := FParent.FZipStream.Size;
+			oldStreamSize := FParent.FZipStream.Size;
 			try
 				FParent.FZipStream.Size := TempStream.Size;
 			except
-				FParent.FZipStream.Size := OSL;
+				FParent.FZipStream.Size := oldStreamSize;
 				raise;
 			end;
 			FParent.FZipStream.Position := 0;
@@ -2175,11 +2215,11 @@ begin
 			FParent.RebuildEndOfCentralDirectory(TempMSStream);
 			//************************************
 			TempMSStream.Position := 0;
-			OSL := FParent.FZipStream.Size;
+			oldStreamSize := FParent.FZipStream.Size;
 			try
 				FParent.FZipStream.Size := TempMSStream.Size;
 			except
-				FParent.FZipStream.Size := OSL;
+				FParent.FZipStream.Size := oldStreamSize;
 				raise;
 			end;
 			FParent.FZipStream.Position := 0;
@@ -2190,15 +2230,12 @@ begin
 	end;
 
 	Result.FDate := FileDateToDateTime(Result.FCentralDirectoryFile.LastModFileTimeDate);
-	if (Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 1) > 0 then
-		Result.FIsEncrypted := True
-	else
-		Result.FIsEncrypted := False;
-	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) > 0;
+	Result.FIsEncrypted := ((Result.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_IsEncrypted) <> 0);
+	Result.FIsFolder := (Result.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) <> 0;
 	Result.FCompressionType := ctUnknown;
 	if (Result.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate) or (Result.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate64) then
 	begin
-		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and 6 of
+		case Result.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_CompressionOption of
 		0: Result.FCompressionType := ctNormal;
 		2: Result.FCompressionType := ctMaximum;
 		4: Result.FCompressionType := ctFast;
@@ -2280,23 +2317,24 @@ end;
 
 function TKAZipEntries.AddFile(FileName, NewFileName: string): TKAZipEntriesEntry;
 var
-	FS: TFileStream;
-	Dir: TSearchRec;
+	stm: TFileStream;
+	dir: TSearchRec;
 	Res: Integer;
 begin
 	Result := nil;
-	Res := FindFirst(FileName, faAnyFile, Dir);
+
+	Res := FindFirst(FileName, faAnyFile, {var}dir);
 	if Res = 0 then
 	begin
-		FS := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+		stm := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
 		try
-			FS.Position := 0;
-			Result := AddStream(NewFileName, Dir.Attr, FileDateToDateTime(Dir.Time), FS)
+			stm.Position := 0;
+			Result := AddStream(NewFileName, dir.Attr, dir.TimeStamp, stm); //dir.TimeStamp in XE6 already converts to TDateTime
 		finally
-			FS.Free;
+			stm.Free;
 		end;
 	end;
-	FindClose(Dir);
+	FindClose(dir);
 end;
 
 function TKAZipEntries.AddFile(FileName: string): TKAZipEntriesEntry;
@@ -2338,7 +2376,7 @@ begin
 			begin
 				FN := FolderName + '\' + Dir.Name;
 				if (FParent.FStoreFolders) and (FParent.FStoreRelativePath) then
-					AddFolderChain(RemoveRootName(FN + '\', RootFolder), Dir.Attr, FileDateToDateTime(Dir.Time));
+					AddFolderChain(RemoveRootName(FN + '\', RootFolder), Dir.Attr, Dir.Timestamp); //dir.TimeStamp in XE6 already converts to TDateTime //FileDateToDateTime(Dir.Time));
 				if WithSubFolders then
 				begin
 					AddFolderEx(FN, RootFolder, WildCard, WithSubFolders);
@@ -2347,7 +2385,7 @@ begin
 			else
 			begin
 				if (Dir.Name = '.') then
-					AddFolderChain(RemoveRootName(FolderName + '\', RootFolder), Dir.Attr, FileDateToDateTime(Dir.Time));
+					AddFolderChain(RemoveRootName(FolderName + '\', RootFolder), Dir.Attr, Dir.Timestamp); //dir.TimeStamp in XE6 already converts to TDateTime //FileDateToDateTime(Dir.Time)
 			end;
 		end
 		else
@@ -2525,7 +2563,7 @@ var
 begin
 	if Item.IsFolder then
 	begin
-		ForceDirectories(FileName);
+		SysUtils.ForceDirectories(FileName);
 	end
 	else
 	begin
@@ -2654,7 +2692,7 @@ begin
 			FN := FParent.GetFileName(Items[X].FileName);
 			DN := FParent.GetFilePath(Items[X].FileName);
 			if DN <> '' then
-				ForceDirectories(TargetDirectory + '\' + DN);
+				SysUtils.ForceDirectories(TargetDirectory + '\' + DN);
 			FileName := TargetDirectory + '\' + DN + FN;
 			if ((OA <> oaOverwriteAll) and (OA <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
 			begin
@@ -2695,7 +2733,7 @@ begin
 				FN := FParent.GetFileName(Items[X].FileName);
 				DN := FParent.GetFilePath(Items[X].FileName);
 				if DN <> '' then
-					ForceDirectories(TargetDirectory + '\' + DN);
+					SysUtils.ForceDirectories(TargetDirectory + '\' + DN);
 				FileName := TargetDirectory + '\' + DN + FN;
 				if ((OA <> oaOverwriteAll) and (OA <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
 				begin
@@ -2861,7 +2899,7 @@ var
 	newEntry: TKAZIPEntriesEntry;
 	i: Integer;
 	zipComment: string;
-	OBM: Boolean;
+	oldBatchMode: Boolean;
 	newLocalEntryPosition: Int64;
 begin
 	if (FParent.FStoreFolders) and (FParent.FStoreRelativePath) then
@@ -2880,13 +2918,13 @@ begin
 	i := Self.IndexOf(itemName);
 	if i >= 0 then
 	begin
-		OBM := FParent.FBatchMode;
+		oldBatchMode := FParent.FBatchMode;
 		try
-			if OBM = False then
+			if FParent.FBatchMode = False then
 				FParent.FBatchMode := True;
 			Remove(i);
 		finally
-			FParent.FBatchMode := OBM;
+			FParent.FBatchMode := oldBatchMode;
 		end;
 	end;
 
@@ -2894,7 +2932,7 @@ begin
 	//We overwrite the central direct (and EOCD marker) and then re-write them after the end of the file
 	newLocalEntryPosition := FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 
-//	FParent.FCurrentDFS := uncompressedLength;
+//	FParent.FCurrentDFS := uncompressedLength; we don't know this yet, will happen when the stream is finalized
 
 	//Fill records
 	newEntry := TKAZipEntriesEntry(Self.Add);
@@ -2908,11 +2946,11 @@ begin
 	newEntry.FLocalFile.Crc32 := 0; //don't know it yet, will back-fill
 	newEntry.FLocalFile.CompressedSize := 0; //don't know it yet, will back-fill
 	newEntry.FLocalFile.UncompressedSize := 0; //don't know it yet, will back-fill
-	newEntry.FLocalFile.FilenameLength := Length(ItemName);
+	newEntry.FLocalFile.FilenameLength := Length(itemName);
 	newEntry.FLocalFile.ExtraFieldLength := 0;
 	newEntry.FLocalFile.FileName := ItemName;
 	newEntry.FLocalFile.ExtraField := '';
-	newEntry.FLocalFile.CompressedData := ''; //not used
+	newEntry.FLocalFile.CompressedData := ''; //not used here, because we'll be writing directly to a stream later
 
 	//Create the Central Directory entry
 	newEntry.FCentralDirectoryFile.CentralFileHeaderSignature := SIG_CentralFile; //PK 0x01 0x02
@@ -2924,25 +2962,21 @@ begin
 	newEntry.FCentralDirectoryFile.Crc32 := 0; //don't know it yet, will back-fill
 	newEntry.FCentralDirectoryFile.CompressedSize := 0; //don't know it yet, will back-fill
 	newEntry.FCentralDirectoryFile.UncompressedSize := 0; //don't know it yet, will back-fill
-	newEntry.FCentralDirectoryFile.FilenameLength := Length(ItemName);
+	newEntry.FCentralDirectoryFile.FilenameLength := Length(itemName);
 	newEntry.FCentralDirectoryFile.ExtraFieldLength := 0;
 	newEntry.FCentralDirectoryFile.FileCommentLength := 0;
 	newEntry.FCentralDirectoryFile.DiskNumberStart := 0;
 	newEntry.FCentralDirectoryFile.InternalFileAttributes := 0;
 	newEntry.FCentralDirectoryFile.ExternalFileAttributes := FileAttr;
 	newEntry.FCentralDirectoryFile.RelativeOffsetOfLocalHeader := newLocalEntryPosition;
-	newEntry.FCentralDirectoryFile.FileName := ItemName;
+	newEntry.FCentralDirectoryFile.FileName := itemName;
 	newEntry.FCentralDirectoryFile.ExtraField := '';
 	newEntry.FCentralDirectoryFile.FileComment := '';
 
 	newEntry.FDate := FileDate;
 
-	if (newEntry.FCentralDirectoryFile.GeneralPurposeBitFlag and 1) > 0 then
-		newEntry.FIsEncrypted := True
-	else
-		newEntry.FIsEncrypted := False;
+	newEntry.FIsEncrypted := ((newEntry.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_IsEncrypted) <> 0);
 	newEntry.FIsFolder := (newEntry.FCentralDirectoryFile.ExternalFileAttributes and faDirectory) > 0;
-
 
 	// Write Local file entry to stream
 	FParent.FZipStream.Position := newLocalEntryPosition;
@@ -3184,26 +3218,24 @@ begin
 	Result := Entries.AddFiles(FileNames);
 end;
 
-function TKAZip.AddFolder(FolderName, RootFolder, WildCard: string;
-	WithSubFolders: Boolean): Boolean;
+function TKAZip.AddFolder(FolderName, RootFolder, WildCard: string; WithSubFolders: Boolean): Boolean;
 begin
 	Result := Entries.AddFolder(FolderName, RootFolder, WildCard, WithSubFolders);
 end;
 
-function TKAZip.AddFilesAndFolders(FileNames: TStrings; RootFolder: string;
-	WithSubFolders: Boolean): Boolean;
+function TKAZip.AddFilesAndFolders(FileNames: TStrings; RootFolder: string; WithSubFolders: Boolean): Boolean;
 begin
 	Result := Entries.AddFilesAndFolders(FileNames, RootFolder, WithSubFolders);
 end;
 
-function TKAZip.AddStream(FileName: string; FileAttr: Word; FileDate: TDateTime; Stream: TStream): TKAZipEntriesEntry;
+function TKAZip.AddStream(FileName: string; FileAttr: Word; FileDate: TDateTime; SourceStream: TStream): TKAZipEntriesEntry;
 begin
-	Result := Entries.AddStream(FileName, FileAttr, FileDate, Stream);
+	Result := Entries.AddStream(FileName, FileAttr, FileDate, SourceStream);
 end;
 
-function TKAZip.AddStream(FileName: string; Stream: TStream): TKAZipEntriesEntry;
+function TKAZip.AddStream(FileName: string; SourceStream: TStream): TKAZipEntriesEntry;
 begin
-	Result := Entries.AddStream(FileName, Stream);
+	Result := Entries.AddStream(FileName, SourceStream);
 end;
 
 procedure TKAZip.Remove(Item: TKAZipEntriesEntry);
@@ -3454,7 +3486,7 @@ begin
 	if FUseTempFiles then
 	begin
 		TempFileName := GetDelphiTempFileName;
-		TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
+		TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate or FILE_ATTRIBUTE_TEMPORARY);
 		try
 			SaveToStream(TempStream);
 			FZipStream.Position := 0;
@@ -3663,11 +3695,49 @@ end;
 
 function TKAZip.AddEntryThroughStream(FileName: string; FileDate: TDateTime; FileAttr: Word): TStream;
 begin
+	{
+		One of the difficult things with the other methods TKAZip is that we normally don't have a source stream
+		we can have KaZip read the uncompressed data from. Often times we will be generating the data,
+		and we want to write it directly to a stream, having it directly compressed, and end up directly in the zip file.
+
+		That means we need a way to hand the user a TSteam, which they can write to.
+
+		When they are finished using the stream, they must Free it. When freed, the special KaZipStream will finalize the
+		zip directory entiry with things like uncompressed size, CRC, etc.
+
+		Sample usage:
+
+			stm := zip.AddEntryThroughStream('admin/resources/RenderedTeapot.gif');
+			try
+				ExportDataToStream(stm);
+			finally
+				stm.Free;
+			end;
+	}
 	Result := Entries.AddEntryThroughStream(FileName, FileDate, FileAttr);
 end;
 
 function TKAZip.AddEntryThroughStream(FileName: string): TStream;
 begin
+	{
+		One of the difficult things with the other methods TKAZip is that we normally don't have a source stream
+		we can have KaZip read the uncompressed data from. Often times we will be generating the data,
+		and we want to write it directly to a stream, having it directly compressed, and end up directly in the zip file.
+
+		That means we need a way to hand the user a TSteam, which they can write to.
+
+		When they are finished using the stream, they must Free it. When freed, the special KaZipStream will finalize the
+		zip directory entiry with things like uncompressed size, CRC, etc.
+
+		Sample usage:
+
+			stm := zip.AddEntryThroughStream('admin/resources/RenderedTeapot.gif');
+			try
+				ExportDataToStream(stm);
+			finally
+				stm.Free;
+			end;
+	}
 	Result := Entries.AddEntryThroughStream(FileName, Now, faArchive);
 end;
 
@@ -3875,8 +3945,6 @@ begin
 			There is a hack in zlib where if we specify a *negative* window size, it will use that to mean
 			that we don't want it to add a header.
 	}
-
-
 	Fcompressor := TZCompressionStream.Create(FTargetStream, compressionLevel,
 					-15, //windowBits - The default value is 15 if deflateInit is used instead.
 					8, //memLevel - The default value is 8
@@ -3965,7 +4033,7 @@ begin
 
 	if (FEntry.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate) or (FEntry.FCentralDirectoryFile.CompressionMethod = ZipCompressionMethod_Deflate64) then
 	begin
-		case FEntry.FCentralDirectoryFile.GeneralPurposeBitFlag and 6 of
+		case FEntry.FCentralDirectoryFile.GeneralPurposeBitFlag and GPF_CompressionOption of
 		0: FEntry.FCompressionType := ctNormal;
 		2: FEntry.FCompressionType := ctMaximum;
 		4: FEntry.FCompressionType := ctFast;
@@ -4000,6 +4068,37 @@ end;
 function TKAZIPStream.Write(const Buffer; Count: Integer): Longint;
 begin
 	Result := FCrc32Stream.Write(Buffer, Count);
+end;
+
+{ TTempFileStream }
+
+constructor TTempFileStream.Create(FlagsAndAttributes: DWORD);
+var
+	tempFilename: string;
+begin
+	tempFilename := Self.GetTemporaryFilename;
+
+	inherited Create(tempFilename, fmCreate or fmShareDenyWrite);
+	SetFileAttributes(PChar(tempFilename), FILE_ATTRIBUTE_TEMPORARY or FILE_FLAG_DELETE_ON_CLOSE);
+end;
+
+destructor TTempFileStream.Destroy;
+var
+	tempFilename: string;
+begin
+	tempFilename := Self.FileName;
+
+	inherited Destroy;
+
+	try
+		DeleteFile(tempFilename);
+	except
+	end;
+end;
+
+function TTempFileStream.GetTemporaryFilename: string;
+begin
+
 end;
 
 end.
