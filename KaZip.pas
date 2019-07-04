@@ -87,6 +87,46 @@ unit KAZip;
 		zip.Close;
 		zip.Free;
 	end;
+
+
+	Version History
+	===============
+
+	v1.13  7/4/2019
+			Removed duplicate code in the ExtractToFile overloads. Filename -> Index -> Entry
+	v1.12  3/2/2016
+			Converted use of many magic numbers to flags and constants.
+			Renamed many cryptically named variables.
+			Changed the use of FileStream for temporary operations to a TempFileStream, with Win32 semantics that the file be deleted when closed.
+	v1.11  6/15/2015
+			Removed unused use of deprecated FileCtrl unit
+	v1.10  4/14/2015
+			Changed to use of UnicodeString where it is a full string.
+			Created TZipString alias of AnsiString/Utf8String where it is stored bytewise
+			Call TSearchRec.Timestap rather than FileDateToDateTime. But i might undo this for D5 compatibility
+	v1.9   10/15/2014
+			Changed to use of AnsiString rather than String
+	v1.8   8/13/2014
+	v1.7   3/20/2014
+			Formatting and cryptic variable name cleanup
+	v1.6  11/11/2013
+			Added ability to stream directly into compressed file; rather than exhausting a 32-bit process's 2 GB memory space
+	v1.5  11/7/2013
+			Changed to use modern zlib 1.2.8
+			Fixed to use many more named constants, rather than magic numbers.
+			Changed CRC calculation to happen on the fly, rather than double 2x operation
+			Hints and warnings
+	v1.4  10/15/2013
+			Changed to use CompressionMethod constants, rather than magic numbers
+	v1.3  7/24/2013
+			More formatting.
+			More hints and warnings fixed.
+	v1.2  4/25/2012
+			Fixed hints/warnings (i.e. unused variable)
+			Fixed formatting.
+			Added sample usage comment block
+	v1.0  4/25/2012
+			Initial commit of original code
 }
 
 interface
@@ -330,7 +370,6 @@ type
 		function AddFolderEx(FolderName: string; RootFolder: string; WildCard: string; WithSubFolders: Boolean): Boolean;
 		//**************************************************************************
 	public
-		{ Public declarations }
 		procedure ParseZip(MS: TStream);
 		constructor Create(AOwner: TKAZip; MS: TStream); overload;
 		constructor Create(AOwner: TKAZip); overload;
@@ -368,8 +407,8 @@ type
 		procedure RenameMultiple(Names: TStringList; NewNames: TStringList);
 
 		//**************************************************************************
-		procedure ExtractToFile(Item: TKAZipEntriesEntry; FileName: string); overload;
-		procedure ExtractToFile(ItemIndex: Integer; FileName: string); overload;
+		procedure ExtractToFile(Item: TKAZipEntriesEntry; DestinationFileName: string); overload;
+		procedure ExtractToFile(ItemIndex: Integer; DestinationFileName: string); overload;
 		procedure ExtractToFile(FileName, DestinationFileName: string); overload;
 		procedure ExtractToStream(Item: TKAZipEntriesEntry; TargetStream: TStream);
 		procedure ExtractAll(TargetDirectory: string);
@@ -514,7 +553,6 @@ type
 		property Entries: TKAZipEntries read FZipHeader;
 		property HasBadEntries: Boolean read FHasBadEntries;
 	published
-		{ Published declarations }
 		property FileName: string read FFileName write SetFileName;
 		property IsZipFile: Boolean read FIsZipFile write SetIsZipFile;
 		property SaveMethod: TZipSaveMethod read FZipSaveMethod write SetZipSaveMethod;
@@ -528,6 +566,8 @@ type
 		property ComponentVersion: string read FComponentVersion write SetComponentVersion;
 		property ReadOnly: Boolean read FReadOnly write SetReadOnly;
 		property ApplyAtributes: Boolean read FApplyAttributes write SetApplyAtributes;
+		property Active: Boolean read FIsZipFile write SetActive;
+
 		property OnDecompressFile: TOnDecompressFile read FOnDecompressFile write FOnDecompressFile;
 		property OnCompressFile: TOnCompressFile read FOnCompressFile write FOnCompressFile;
 		property OnZipChange: TOnZipChange read FOnZipChange write FOnZipChange;
@@ -536,7 +576,6 @@ type
 		property OnRebuildZip: TOnRebuildZip read FOnRebuildZip write SetOnRebuildZip;
 		property OnRemoveItems: TOnRemoveItems read FOnRemoveItems write SetOnRemoveItems;
 		property OnOverwriteFile: TOnOverwriteFile read FOnOverwriteFile write SetOnOverwriteFile;
-		property Active: Boolean read FIsZipFile write SetActive;
 	end;
 
 type
@@ -2587,92 +2626,58 @@ begin
 	end;
 end;
 
-procedure TKAZipEntries.ExtractToFile(Item: TKAZipEntriesEntry; FileName: string);
+procedure TKAZipEntries.ExtractToFile(Item: TKAZipEntriesEntry; DestinationFileName: string);
 var
-	Can: Boolean;
-	OA: TOverwriteAction;
+	oa: TOverwriteAction;
+	can: Boolean;
 begin
-	OA := FParent.FOverwriteAction;
-	Can := True;
-	if ((OA <> oaOverwriteAll) and (OA <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
+	if not Assigned(Item) then
+		raise EArgumentException.Create('Item');
+	if DestinationFilename = '' then
+		raise EArgumentException.Create('DestinationFilename');
+
+	//Check if the file exists; and what to do about it.
+	oa := FParent.FOverwriteAction;
+	can := True;
+	if ((oa <> oaOverwriteAll) and (oa <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
 	begin
-		if FileExists(FileName) then
-		begin
-			FParent.FOnOverwriteFile(FParent, FileName, OA);
-		end
+		if FileExists(DestinationFileName) then
+			FParent.FOnOverwriteFile(FParent, DestinationFileName, oa)
 		else
-		begin
-			OA := oaOverwrite;
-		end;
+			oa := oaOverwrite;
 	end;
-	case OA of
-		oaSkip: Can := False;
-		oaSkipAll: Can := False;
-		oaOverwrite: Can := True;
-		oaOverwriteAll: Can := True;
+	case oa of
+	oaSkip: can := False;
+	oaSkipAll: can := False;
+	oaOverwrite: can := True;
+	oaOverwriteAll: can := True;
 	end;
-	if Can then
-		InternalExtractToFile(Item, FileName);
+	if not can then
+		Exit;
+
+	InternalExtractToFile(Item, DestinationFileName);
 end;
 
-procedure TKAZipEntries.ExtractToFile(ItemIndex: Integer; FileName: string);
+procedure TKAZipEntries.ExtractToFile(ItemIndex: Integer; DestinationFileName: string);
 var
-	Can: Boolean;
-	OA: TOverwriteAction;
+	entry: TKAZipEntriesEntry;
 begin
-	OA := FParent.FOverwriteAction;
-	Can := True;
-	if ((OA <> oaOverwriteAll) and (OA <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
-	begin
-		if FileExists(FileName) then
-		begin
-			FParent.FOnOverwriteFile(FParent, FileName, OA);
-		end
-		else
-		begin
-			OA := oaOverwrite;
-		end;
-	end;
-	case OA of
-		oaSkip: Can := False;
-		oaSkipAll: Can := False;
-		oaOverwrite: Can := True;
-		oaOverwriteAll: Can := True;
-	end;
-	if Can then
-		InternalExtractToFile(Items[ItemIndex], FileName);
+	{
+		ExtractToFile(ItemIndex) --> ExtractToFile(Entry)
+	}
+	entry := Self.Items[ItemIndex];
+	Self.ExtractToFile(entry, DestinationFileName);
 end;
 
 procedure TKAZipEntries.ExtractToFile(FileName, DestinationFileName: string);
 var
-	I: Integer;
-	Can: Boolean;
-	OA: TOverwriteAction;
+	itemIndex: Integer;
 begin
-	OA := FParent.FOverwriteAction;
-	Can := True;
-	if ((OA <> oaOverwriteAll) and (OA <> oaSkipAll)) and (Assigned(FParent.FOnOverwriteFile)) then
-	begin
-		if FileExists(DestinationFileName) then
-		begin
-			FParent.FOnOverwriteFile(FParent, DestinationFileName, OA);
-		end
-		else
-		begin
-			OA := oaOverwrite;
-		end;
-	end;
-	case OA of
-		oaSkip: Can := False;
-		oaSkipAll: Can := False;
-		oaOverwrite: Can := True;
-		oaOverwriteAll: Can := True;
-	end;
-	if Can then
-	begin
-		I := IndexOf(FileName);
-		InternalExtractToFile(Items[I], DestinationFileName);
-	end;
+	{
+		ExtractToFile(FileName) --> ExtractToFile(ItemIndex)
+	}
+	itemIndex := IndexOf(FileName);
+	Self.ExtractToFile(itemIndex, DestinationFileName);
 end;
 
 procedure TKAZipEntries.ExtractAll(TargetDirectory: string);
