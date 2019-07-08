@@ -20,6 +20,7 @@ unit KAZip;
 
 	How to add a stream to a zip file
 	---------------------------------
+
 	var
 		zip: TKaZip;
 		zipFile: string;
@@ -50,7 +51,7 @@ unit KAZip;
 
 		ms := TStringStream.Create('The quick brown fox jumped over the lazy dog then sat on a log');
 		try
-			zip.AddStream('New Document.txt', stream);
+			zip.AddStream('New Document.txt', ms);
 		finally
 			ms.Free;
 		end;
@@ -69,13 +70,15 @@ unit KAZip;
 	const
 		BOM: WideChar = #$FEFF; //U+FEFF - Zero Width No-Break Space
 	begin
+		docxml := '<Sample>The quick brown fox jumped over the lazy dog then sat on a log</Sample>';
+
 		zipFile := 'C:\DelphiComponents\KaZip\Component\TestArchive.zip';
 
 		zip := TKaZip.Create(nil);
 		zip.CreateZip(zipFile);
 		zip.Open(zipFile);
 
-		docxml := '<Sample>The quick brown fox jumped over the lazy dog then sat on a log</Sample>';
+
 		ms := TMemoryStream.Create
 		try
 			ms.Write(BOM, SizeOf(WideChar)); //Write the UTF-16 Byte Order Mark (optional)
@@ -89,9 +92,15 @@ unit KAZip;
 	end;
 
 
+
+
 	Version History
 	===============
 
+	v1.15  7/8/2019
+				Made more compatible between D5 and XE6
+	v1.14  7/8/2019
+				Fixed bugs in TTempFileStream
 	v1.13  7/4/2019
 			Removed duplicate code in the ExtractToFile overloads. Filename -> Index -> Entry
 	v1.12  3/2/2016
@@ -134,10 +143,15 @@ interface
 {DEFINE USE_BZIP2}
 
 uses
-	Windows, SysUtils, Classes, Masks, TypInfo
-{$IFDEF USE_BZIP2}, BZip2{$ENDIF}
-	, ZLibEx //zlib 1.2.8
-	;
+	Windows,
+	SysUtils,
+	Classes,
+{$IFDEF USE_BZIP2}BZip2, {$ENDIF}
+	ZLibEx; //zlib 1.2.8
+
+{$ifdef VER130}
+	{$DEFINE DELPHI_5}
+{$endif}
 
 type
 	TZipSaveMethod = (FastSave, RebuildAll);
@@ -370,12 +384,14 @@ type
 		function AddFolderEx(FolderName: string; RootFolder: string; WildCard: string; WithSubFolders: Boolean): Boolean;
 		//**************************************************************************
 	public
-		procedure ParseZip(MS: TStream);
 		constructor Create(AOwner: TKAZip; MS: TStream); overload;
 		constructor Create(AOwner: TKAZip); overload;
-		destructor Destroy; override;
+
+		procedure ParseZip(SourceStream: TStream);
+
 		//**************************************************************************
 		function IndexOf(const FileName: string): Integer;
+
 		//**************************************************************************
 		function AddFile(FileName, NewFileName: string): TKAZipEntriesEntry; overload;
 		function AddFile(FileName: string): TKAZipEntriesEntry; overload;
@@ -393,11 +409,13 @@ type
 		procedure RemoveFiles(List: TList);
 		procedure RemoveSelected;
 		procedure Rebuild;
+
 		//**************************************************************************
 		procedure Select(WildCard: string);
 		procedure SelectAll;
 		procedure DeSelectAll;
 		procedure InvertSelection;
+
 		//**************************************************************************
 		procedure Rename(Item: TKAZipEntriesEntry; NewFileName: string); overload;
 		procedure Rename(ItemIndex: Integer; NewFileName: string); overload;
@@ -413,6 +431,7 @@ type
 		procedure ExtractToStream(Item: TKAZipEntriesEntry; TargetStream: TStream);
 		procedure ExtractAll(TargetDirectory: string);
 		procedure ExtractSelected(TargetDirectory: string);
+
 		//**************************************************************************
 		property Items[Index: Integer]: TKAZipEntriesEntry read GetHeaderEntry write SetHeaderEntry;
 	end;
@@ -500,7 +519,6 @@ type
 		constructor Create(AOwner: TComponent); override;
 		destructor Destroy; override;
 		//**************************************************************************
-		function GetDelphiTempFileName: string;
 		function GetFileName(S: string): string;
 		function GetFilePath(S: string): string;
 		//**************************************************************************
@@ -508,7 +526,7 @@ type
 		procedure CreateZip(FileName: string); overload;
 		procedure Open(FileName: string); overload;
 		procedure Open(MS: TStream); overload;
-		procedure SaveToStream(Stream: TStream);
+		procedure SaveToStream(TargetStream: TStream);
 		procedure Rebuild;
 		procedure FixZip(MS: TStream);
 		procedure Close;
@@ -627,7 +645,16 @@ procedure Register;
 function ToZipName(FileName: UnicodeString): TZipString;
 function ToDosName(FileName: string): string;
 
+type
+	EKaZipException = class(Exception);
+
 implementation
+
+uses
+	{$IFDEF DELPHI_5}FileCtrl, {$ENDIF} //ForceDirectories
+	//TypInfo,
+	Masks;
+
 
 	{
 		We use Zip compression method 8 (Deflate).
@@ -788,13 +815,15 @@ end;
 
 { TTempFileStream }
 type
-	TTempFileStream = class(TFileStream)
+	TTempFileStream = class(THandleStream)
 	protected
-		function GetTemporaryFilename: string;
+		function CreateTemporaryFile: THandle;
 	public
-		constructor Create(FlagsAndAttributes: DWORD); overload;
+		constructor Create;
 		destructor Destroy; override;
 	end;
+
+
 
 { TKAZipEntriesEntry }
 
@@ -951,7 +980,6 @@ end;
 function TKAZipEntriesEntry.Test: Boolean;
 var
 	stm: TStream;
-	tempFilename: string;
 begin
 	Result := True;
 	try
@@ -959,15 +987,13 @@ begin
 		begin
 			if FParent.FParent.FUseTempFiles then
 			begin
-				tempFilename := FParent.FParent.GetDelphiTempFileName;
-				stm := TTempFileStream.Create(tempFilename, fmOpenReadWrite or FmCreate);
+				stm := TTempFileStream.Create;
 				try
 					ExtractToStream(stm);
 					stm.Position := 0;
 					Result := (FParent.CalculateCRCFromStream(stm) = CRC32);
 				finally
 					stm.Free;
-					DeleteFile(tempFilename);
 				end;
 			end
 			else
@@ -1004,7 +1030,7 @@ var
 begin
 	fn := ToZipName(Value);
 	if FParent.IndexOf(FN) > -1 then
-		raise Exception.Create('File with same name already exists in Archive');
+		raise EKaZipException.Create('File with same name already exists in Archive');
 
 	FCentralDirectoryFile.FileName := fn;
 	FCentralDirectoryFile.FilenameLength := Length(fn);
@@ -1027,16 +1053,11 @@ end;
 constructor TKAZipEntries.Create(AOwner: TKAZip; MS: TStream);
 begin
 	inherited Create(TKAZipEntriesEntry);
+
 	FParent := AOwner;
 	FIsZipFile := False;
 	FLocalHeaderNumFiles := 0;
 	ParseZip(MS);
-end;
-
-destructor TKAZipEntries.Destroy;
-begin
-
-	inherited Destroy;
 end;
 
 function TKAZipEntries.Adler32(adler: uLong; buf: pByte; len: uInt): uLong;
@@ -1299,21 +1320,22 @@ begin
 	Result := Count = FParent.FEndOfCentralDir.TotalNumberOfEntriesOnThisDisk;
 end;
 
-procedure TKAZipEntries.ParseZip(MS: TStream);
+procedure TKAZipEntries.ParseZip(SourceStream: TStream);
 begin
 	FIsZipFile := False;
-	Clear;
-	if FindCentralDirectory(MS) then
+	Self.Clear;
+
+	if FindCentralDirectory(SourceStream) then
 	begin
-		if ParseCentralHeaders(MS) then
+		if ParseCentralHeaders(SourceStream) then
 		begin
 			FIsZipFile := True;
-			LoadLocalHeaders(MS);
+			LoadLocalHeaders(SourceStream);
 		end;
 	end
 	else
 	begin
-		if ParseLocalHeaders(MS) then
+		if ParseLocalHeaders(SourceStream) then
 		begin
 			FIsZipFile := Count > 0;
 			if FIsZipFile then
@@ -1502,9 +1524,8 @@ end;
 
 procedure TKAZipEntries.Remove(ItemIndex: Integer; Flush: Boolean);
 var
-	TempStream: TFileStream;
+	tempStream: TStream;
 	TempMSStream: TMemoryStream;
-	TempFileName: string;
 	zipComment: string;
 	oldStreamSize: Cardinal;
 	//*********************************************
@@ -1568,8 +1589,7 @@ begin
 	begin
 		if FParent.FUseTempFiles then
 		begin
-			TempFileName := FParent.GetDelphiTempFileName;
-			TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate);
+			TempStream := TTempFileStream.Create;
 			try
 				FParent.SaveToStream(TempStream);
 				TempStream.Position := 0;
@@ -1587,7 +1607,6 @@ begin
 				FParent.FZipHeader.ParseZip(FParent.FZipStream);
 			finally
 				TempStream.Free;
-				DeleteFile(TempFileName)
 			end;
 		end
 		else
@@ -1663,9 +1682,8 @@ var
 	X: Integer;
 	oldStreamSize: Integer;
 	NewSize: Cardinal;
-	TempStream: TFileStream;
+	tempStream: TStream;
 	TempMSStream: TMemoryStream;
-	TempFileName: string;
 begin
 	for X := Files.Count - 1 downto 0 do
 	begin
@@ -1676,8 +1694,7 @@ begin
 	NewSize := 0;
 	if FParent.FUseTempFiles then
 	begin
-		TempFileName := FParent.GetDelphiTempFileName;
-		TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite);
+		tempStream := TTempFileStream.Create;
 		try
 			FParent.SaveToStream(TempStream);
 			TempStream.Position := 0;
@@ -1694,8 +1711,7 @@ begin
 			FParent.FZipHeader.ParseZip(FParent.FZipStream);
 			//*********************************************************************
 		finally
-			TempStream.Free;
-			DeleteFile(TempFileName)
+			tempStream.Free;
 		end;
 	end
 	else
@@ -1987,16 +2003,14 @@ var
 	oldStreamSize: Cardinal;
 	NewSize: Cardinal;
 	ZipComment: string;
-	TempStream: TFileStream;
+	tempStream: TStream;
 	TempMSStream: TMemoryStream;
-	TempFileName: string;
 	Level: TZCompressionLevel;
 	OBM: Boolean;
 begin
 	if FParent.FUseTempFiles then
 	begin
-		TempFileName := FParent.GetDelphiTempFileName;
-		TempStream := TTempFileStream.Create(TempFileName, fmOpenReadWrite);
+		tempStream := TTempFileStream.Create;
 		try
 			//*********************************** SAVE ALL OLD LOCAL ITEMS
 			FParent.RebuildLocalFiles(TempStream);
@@ -2122,8 +2136,7 @@ begin
 			FParent.FZipStream.Position := 0;
 			FParent.FZipStream.CopyFrom(TempStream, TempStream.Size);
 		finally
-			TempStream.Free;
-			DeleteFile(TempFileName)
+			tempStream.Free;
 		end;
 	end
 	else
@@ -2537,7 +2550,7 @@ var
 {$ENDIF}
 begin
 	if (Item.FIsEncrypted) then
-		raise Exception.Create('Cannot process file "' + Item.FileName + '": File is encrypted');
+		raise EKaZipException.Create('Cannot process file "' + Item.FileName + '": File is encrypted');
 
 	if (Item.CompressionMethod <> ZipCompressionMethod_Deflate)
 {$IFDEF USE_BZIP2}
@@ -2545,7 +2558,7 @@ begin
 {$ENDIF}
 		and (Item.CompressionMethod <> ZipCompressionMethod_Store) then
 	begin
-		raise Exception.Create('Cannot process file "' + Item.FileName + '": Unknown compression method '+IntToStr(Item.CompressionMethod));
+		raise EKaZipException.Create('Cannot process file "' + Item.FileName + '": Unknown compression method '+IntToStr(Item.CompressionMethod));
 	end;
 
 	sourceStream := TMemoryStream.Create;
@@ -2632,9 +2645,9 @@ var
 	can: Boolean;
 begin
 	if not Assigned(Item) then
-		raise EArgumentException.Create('Item');
+		raise EKaZipException.Create('Item');
 	if DestinationFilename = '' then
-		raise EArgumentException.Create('DestinationFilename');
+		raise EKaZipException.Create('DestinationFilename');
 
 	//Check if the file exists; and what to do about it.
 	oa := FParent.FOverwriteAction;
@@ -2867,7 +2880,7 @@ begin
 
 	if Names.Count <> NewNames.Count then
 	begin
-		raise Exception.Create('Names and NewNames must have equal count');
+		raise EKaZipException.Create('Names and NewNames must have equal count');
 	end
 	else
 	begin
@@ -2937,7 +2950,7 @@ begin
 	//We overwrite the central direct (and EOCD marker) and then re-write them after the end of the file
 	newLocalEntryPosition := FParent.FEndOfCentralDir.OffsetOfStartOfCentralDirectory;
 
-//	FParent.FCurrentDFS := uncompressedLength; we don't know this yet, will happen when the stream is finalized
+//	FParent.FCurrentDFS := [uncompressedLength]; we don't know this yet, will happen when the stream is finalized
 
 	//Fill records
 	newEntry := TKAZipEntriesEntry(Self.Add);
@@ -3092,7 +3105,7 @@ begin
 	end
 	else
 	begin
-		raise Exception.Create('File "' + FileName + '" not found!');
+		raise EKaZipException.Create('File "' + FileName + '" not found!');
 	end;
 end;
 
@@ -3145,19 +3158,6 @@ end;
 procedure TKAZip.SetIsZipFile(const Value: Boolean);
 begin
 	//****************************************************************************
-end;
-
-function TKAZip.GetDelphiTempFileName: string;
-var
-	TmpDir: array[0..1000] of Char;
-	TmpFN: array[0..1000] of Char;
-begin
-	Result := GetCurrentDir;
-	if GetTempPath(1000, TmpDir) <> 0 then
-	begin
-		if GetTempFileName(TmpDir, '', 0, TmpFN) <> 0 then
-			Result := StrPas(TmpFN);
-	end;
 end;
 
 procedure TKAZip.OnDecompress(Sender: TObject);
@@ -3475,33 +3475,30 @@ begin
 		FOnRebuildZip(Self, 100, 100);
 end;
 
-procedure TKAZip.SaveToStream(Stream: TStream);
+procedure TKAZip.SaveToStream(TargetStream: TStream);
 begin
-	RebuildLocalFiles(Stream);
-	RebuildCentralDirectory(Stream);
-	RebuildEndOfCentralDirectory(Stream);
+	RebuildLocalFiles(TargetStream);
+	RebuildCentralDirectory(TargetStream);
+	RebuildEndOfCentralDirectory(TargetStream);
 end;
 
 procedure TKAZip.Rebuild;
 var
-	TempStream: TFileStream;
-	TempMSStream: TMemoryStream;
-	TempFileName: string;
+	tempStream: TStream;
+	tempMSStream: TMemoryStream;
 begin
 	if FUseTempFiles then
 	begin
-		TempFileName := GetDelphiTempFileName;
-		TempStream := TFileStream.Create(TempFileName, fmOpenReadWrite or FmCreate or FILE_ATTRIBUTE_TEMPORARY);
+		tempStream := TTempFileStream.Create;
 		try
-			SaveToStream(TempStream);
+			SaveToStream(tempStream);
 			FZipStream.Position := 0;
 			FZipStream.Size := 0;
 			TempStream.Position := 0;
-			FZipStream.CopyFrom(TempStream, TempStream.Size);
+			FZipStream.CopyFrom(tempStream, tempStream.Size);
 			Entries.ParseZip(FZipStream);
 		finally
-			TempStream.Free;
-			DeleteFile(TempFileName)
+			tempStream.Free;
 		end;
 	end
 	else
@@ -3790,7 +3787,7 @@ end;
 function TCRC32Stream.Read(var Buffer; Count: Integer): Longint;
 begin
 	if FTargetStream = nil then
-		raise Exception.Create('Cannot read from CRC stream when no target stream is present');
+		raise EKaZipException.Create('Cannot read from CRC stream when no target stream is present');
 
 	Result := FTargetStream.Read({var}Buffer, Count)
 end;
@@ -3812,13 +3809,13 @@ class procedure TCRC32Stream.SelfTest;
 	procedure CheckEqualsString(const Expected, Actual: string);
 	begin
 		if Expected <> Actual then
-			raise Exception.CreateFmt('Expected "%s", but was "%s"', [Expected, Actual]);
+			raise EKaZipException.CreateFmt('Expected "%s", but was "%s"', [Expected, Actual]);
 	end;
 
 	procedure CheckEquals(const Expected, Actual: LongWord; Description: string);
 	begin
 		if Expected <> Actual then
-			raise Exception.CreateFmt('Expected <%d>, but was <%d>.  %s', [Expected, Actual, Description]);
+			raise EKaZipException.CreateFmt('Expected <%d>, but was <%d>.  %s', [Expected, Actual, Description]);
 	end;
 
 	function CRCNewWay(InputData: AnsiString): LongWord;
@@ -4062,12 +4059,12 @@ end;
 
 function TKAZIPStream.Read(var Buffer; Count: Integer): Longint;
 begin
-	raise Exception.Create('Cannot read from zip compressor stream');
+	raise EKaZipException.Create('Cannot read from zip compressor stream');
 end;
 
 function TKAZIPStream.Seek(Offset: Integer; Origin: Word): Longint;
 begin
-	raise Exception.Create('Cannot seek a zip compressor stream');
+	raise EKaZipException.Create('Cannot seek a zip compressor stream');
 end;
 
 function TKAZIPStream.Write(const Buffer; Count: Integer): Longint;
@@ -4077,33 +4074,69 @@ end;
 
 { TTempFileStream }
 
-constructor TTempFileStream.Create(FlagsAndAttributes: DWORD);
+constructor TTempFileStream.Create;
 var
-	tempFilename: string;
+	hFile: THandle;
 begin
-	tempFilename := Self.GetTemporaryFilename;
+	hFile := CreateTemporaryFile;
 
-	inherited Create(tempFilename, fmCreate or fmShareDenyWrite);
-	SetFileAttributes(PChar(tempFilename), FILE_ATTRIBUTE_TEMPORARY or FILE_FLAG_DELETE_ON_CLOSE);
+	inherited Create(hFile);
+end;
+
+{$IFDEF DELPHI_5}
+const
+	RaiseLastOSError: procedure = RaiseLastWin32Error;
+{$ENDIF}
+
+
+function TTempFileStream.CreateTemporaryFile: THandle;
+var
+	tempPath: string;
+	tempFilename: string;
+	prefix: string;
+	n: Cardinal;
+	hFile: THandle;
+begin
+	SetLength(tempPath, 32767);
+	n := GetTempPath(Length(tempPath), PChar(tempPath));
+	if n = 0 then
+		RaiseLastOSError;
+	SetLength(tempPath, n); // returned value is length of string
+
+	// GetTempFilename when using uUnique of zero will cause the file to be created.
+	//	Returned n is the number used to create the temp file
+	prefix := 'kaz';
+	SetLength(tempFilename, 32767);
+	n := GetTempFileName(PChar(tempPath), PChar(prefix), 0, PChar(tempFilename));
+	if n = 0 then
+		RaiseLastOSError;
+	tempFilename := PChar(tempFilename);
+
+	// Create a file marked as both "temporary" and "delete on close".
+	// Delete on close is nice because it saves us from having to delete it when we're done.
+	// Temporary is nice because it will cause the caching system to minimize writes to the disk - trying to do everything in RAM (making it faster).
+	hFile := CreateFile(PChar(tempFilename), GENERIC_READ or GENERIC_WRITE, 0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY or FILE_FLAG_DELETE_ON_CLOSE, 0);
+	if hFile = INVALID_HANDLE_VALUE then
+	begin
+		// If the open failed, then delete the placeholder file created by GetTempFileName.
+		DeleteFile(tempFilename);
+		RaiseLastOSError;
+	end;
+
+	Result := hFile;
 end;
 
 destructor TTempFileStream.Destroy;
 var
-	tempFilename: string;
+	hFile: THandle;
 begin
-	tempFilename := Self.FileName;
+	// THandleStream does not close the handle when it is destroyed.
+	hFile := Self.Handle;
 
 	inherited Destroy;
 
-	try
-		DeleteFile(tempFilename);
-	except
-	end;
-end;
-
-function TTempFileStream.GetTemporaryFilename: string;
-begin
-
+	if hFile <> INVALID_HANDLE_VALUE then
+		CloseHandle(hFile);
 end;
 
 end.
